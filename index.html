@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hydra Jump Bot</title>
+  <link rel="stylesheet" href="app.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="favicon.png">
+</head>
+<body>
+
+<!-- 
+ $$$$$$\            $$\            $$\     $$\   $$\                 $$\                    
+$$  __$$\           \__|           $$ |    $$ |  $$ |                $$ |                   
+$$ /  $$ |$$\   $$\ $$\  $$$$$$\ $$$$$$\   $$ |  $$ |$$\   $$\  $$$$$$$ | $$$$$$\  $$$$$$\  
+$$ |  $$ |$$ |  $$ |$$ |$$  __$$\\_$$  _|  $$$$$$$$ |$$ |  $$ |$$  __$$ |$$  __$$\ \____$$\ 
+$$ |  $$ |$$ |  $$ |$$ |$$$$$$$$ | $$ |    $$  __$$ |$$ |  $$ |$$ /  $$ |$$ |  \__|$$$$$$$ |
+$$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |     $$  __$$ |
+\$$$$$$ / \$$$$$$  |$$ |\$$$$$$$\  \$$$$  |$$ |  $$ |\$$$$$$$ |\$$$$$$$ |$$ |     \$$$$$$$ |
+ \___$$$\  \______/ \__| \_______|  \____/ \__|  \__| \____$$ | \_______|\__|      \_______|
+     \___|                                           $$\   $$ |                             
+                                                     \$$$$$$  |                             
+                                                      \______/                              
+-->
+<header class="hdr">
+  <h1>Hydra Jump Bot</h1>
+  <span class="badge" id="collectionCount">0 packs</span>
+  <span class="badge warn" id="storageStatus">Storage…</span>
+  <span class="badge ok" id="jsStatus">Script: OK</span>
+  <div class="switcher">
+    <button id="btnViewCollection" class="active">Collection</button>
+    <button id="btnViewPlay">Play</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- COLLECTION -->
+  <section class="card" id="collectionCard">
+    <h2>Collection</h2>
+    <div class="content">
+
+      <details open>
+        <summary>Storage Health</summary>
+        <div class="row">
+          <div style="flex:2">
+            <div class="meter"><div id="storeBar" style="width:0%"></div></div>
+            <div class="tiny" id="storeLine">…</div>
+            <div class="tiny" id="storeHint"></div>
+          </div>
+          <div style="flex:1; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start">
+            <button class="btn btn-pink" id="backupBtn">Backup Now</button>
+            <!-- Single, relocated wipe button -->
+            <button class="btn btn-danger" id="wipeBtn" title="Delete all packs &amp; stats">Wipe Collection</button>
+          </div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Add / Manage Packs</summary>
+        <div class="row">
+          <div><label>Pack Name</label><input id="packName" type="text" placeholder="e.g., Vampires — Life Leech"></div>
+          <div><label>Theme (optional)</label><input id="packTheme" type="text" placeholder="e.g., Lifedrain"></div>
+        </div>
+        <div class="row">
+          <div><label>Color 1</label>
+            <select id="color1"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
+          </div>
+          <div><label>Color 2</label>
+            <select id="color2"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
+          </div>
+          <div><label>Color 3</label>
+            <select id="color3"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
+          </div>
+          <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Core Box"></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
+          <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
+        </div>
+
+        <div class="sep"></div>
+        <div class="row">
+          <button class="btn btn-gray" id="exportBtn">Export JSON</button>
+          <button class="btn btn-gray" id="exportCsvBtn">Export CSV</button>
+          <button class="btn btn-gray" id="importJsonBtn">Restore JSON</button>
+          <input id="importFileJson" type="file" accept="application/json" style="display:none">
+          <button class="btn btn-gray" id="importCsvBtn">Import CSV</button>
+          <input id="importFileCsv" type="file" accept=".csv,text/csv" style="display:none">
+          <button class="btn btn-yellow" id="seedBtn">Load Demo Packs</button>
+          <!-- Reset offered counters lives here -->
+          <button class="btn btn-danger" id="resetOfferedBtn" title="Set all offered counters back to 0">Reset Offered Counters</button>
+        </div>
+      </details>
+
+      <details open>
+        <summary>All Packs</summary>
+        <div class="row" style="align-items:center">
+          <div>
+            <label>Sort by</label>
+            <div class="row">
+              <select id="sortBy">
+                <option value="name">Name</option>
+                <option value="set">Set / Box</option>
+                <option value="theme">Theme</option>
+                <option value="ctype">Color Type</option>
+                <option value="offered">Offered Count</option>
+              </select>
+              <button id="sortDir" class="btn btn-gray">Asc</button>
+            </div>
+          </div>
+          <div>
+            <label>Page size</label>
+            <input id="pageSize" type="number" min="5" max="200" value="20" step="5">
+          </div>
+          <div class="pager">
+            <button class="btn btn-gray" id="prevPage">Prev</button>
+            <div class="badge" id="pageInfo">Page 1 / 1</div>
+            <button class="btn btn-gray" id="nextPage">Next</button>
+            <label class="tiny">Jump</label><input id="jumpPage" type="number" min="1" value="1" style="width:80px">
+          </div>
+        </div>
+
+        <div class="list" id="packList"></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- PLAY -->
+  <section class="card hidden" id="playCard">
+    <h2>Play</h2>
+    <div class="content">
+
+      <details open>
+        <summary>Filters</summary>
+        <div class="row">
+          <div>
+            <label>Set / Box</label>
+            <div id="setFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+          </div>
+          <div>
+            <label>Colors (any-match)</label>
+            <div id="colorFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+          </div>
+        </div>
+        <div class="tiny" id="eligibleCount">Eligible after filter: 0</div>
+      </details>
+
+      <details open>
+        <summary>Probabilistic guardrails</summary>
+        <div class="guard">
+          <div id="guardPool">Pool now: …</div>
+          <div class="bar" id="guardBar"></div>
+          <div id="guardMono">If first is Mono: …</div>
+          <div id="guardBi">If first is Two: …</div>
+          <div id="guardTri">If first is Tri: …</div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Roll Settings</summary>
+        <div class="row">
+          <div><label>Options per roll (3–6)</label><input id="optionsPerRoll" type="number" min="3" max="6" step="1" value="4"></div>
+          <div>
+            <label>Chance to include a 3-color option</label>
+            <div class="row" style="align-items:center">
+              <input id="triSharePct" type="range" min="0" max="100" step="5" value="10">
+              <div style="flex:0 0 auto"><span id="triSharePctLabel">10%</span></div>
+            </div>
+            <div class="tiny">Set to 0% to disable tri entirely (unless Relax must rescue).</div>
+          </div>
+        </div>
+        <div class="row">
+          <label class="pill"><input type="checkbox" id="capOneTri" checked> Cap at most one 3-color option</label>
+          <label class="pill"><input type="checkbox" id="fairMode" checked> Fair RNG (bias under-offered)</label>
+        </div>
+      </details>
+
+      <div class="row" style="margin-top:6px">
+        <button class="btn btn-cyan" id="rollFirstBtn">Roll First Options</button>
+        <button class="btn btn-gray" id="resetPlayBtn">Reset Session</button>
+      </div>
+
+      <div>
+        <label>First Roll (pick one)</label>
+        <div class="options" id="firstOptions"></div>
+      </div>
+
+      <div id="chosenFirstWrap" style="display:none">
+        <details open>
+          <summary>First Choice</summary>
+          <div id="chosenFirst"></div>
+        </details>
+      </div>
+
+      <details>
+        <summary>Second Roll Settings</summary>
+        <div class="row">
+          <label class="pill"><input type="checkbox" id="excludeUnpicked"> Exclude unpicked from first roll</label>
+          <label class="pill"><input type="checkbox" id="relaxIfStuck" checked> Relax constraint if stuck</label>
+          <div id="overlapWrap" class="row" style="display:none">
+            <div>
+              <label>Overlap Color (for 2-color first picks)</label>
+              <select id="overlapColor"><option value="AUTO">Auto (either color)</option></select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="row" style="margin-top:6px">
+        <button class="btn btn-cyan" id="rollSecondBtn">Roll Second Options</button>
+        <button class="btn btn-yellow" id="rerollSecondBtn">Re-roll Second Options</button>
+      </div>
+      <div class="hint">Bias: mostly two-color games. Tri-color appears per slider (capped to 1), or as a last-resort when “Relax” fills missing slots.</div>
+
+      <div>
+        <label>Second Roll (pick one)</label>
+        <div class="options" id="secondOptions"></div>
+      </div>
+
+      <div id="finalPairWrap" style="display:none">
+        <details open>
+          <summary>Final Pair</summary>
+          <div id="finalPair"></div>
+        </details>
+      </div>
+
+      <div class="sep"></div>
+      <div class="stat" id="statusLine">No session yet.</div>
+
+      <div class="sep"></div>
+      <div>
+        <label>Session Log</label>
+        <ul id="log" class="log"></ul>
+      </div>
+
+      <details open>
+        <summary>Player Mode</summary>
+        <div class="row">
+          <div><label>Players (2–6)</label><input id="players" type="number" min="2" max="6" step="1" value="2"></div>
+          <div class="pill"><label class="pill"><input type="checkbox" id="avoidCollisions" checked> Avoid pack reuse across players</label></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-cyan" id="dealBtn">Deal Pairs</button>
+          <button class="btn btn-gray" id="clearDealsBtn">Clear Deals</button>
+        </div>
+        <div class="tiny" id="dealSummary"></div>
+        <div class="options" id="dealtResults"></div>
+      </details>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="ftr">
+  <small>© 2025 QuietHydra</small>
+  <div class="spacer"></div>
+  <div class="pill" style="gap:10px">
+    <a href="https://bsky.app/profile/quiethydra.com" target="_blank" rel="noopener">Bluesky</a>
+    <a href="https://www.youtube.com/@QuietHydra" target="_blank" rel="noopener">YouTube</a>
+    <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://ko-fi.com/quiethydra" target="_blank" rel="noopener">Buy me Singles Ko-fi</a>
+  </div>
+  <span class="tiny">
+  <a href="LICENSE" target="_blank" rel="noopener">Non-Commercial License</a>
+  ·
+  <a href="NOTICE.md" target="_blank" rel="noopener">Attribution Notice</a>
+</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
