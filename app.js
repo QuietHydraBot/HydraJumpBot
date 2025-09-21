@@ -440,19 +440,41 @@
     on($('seedBtn'),'click',()=>{
       const id=()=>Math.random().toString(36).slice(2,10);
       const demo=[
-        {name:'Vampires — Life Leech',theme:'Lifedrain',colors:['B'],set:'Core Box'},
-        {name:'Angels — Righteous Might',theme:'Flyers',colors:['W'],set:'Core Box'},
-        {name:'Merfolk — Tidal Tricks',theme:'Tempo',colors:['U'],set:'Core Box'},
-        {name:'Goblins — Mob Rule',theme:'Tokens',colors:['R'],set:'Core Box'},
-        {name:'Elves — Growth Spiral',theme:'Ramp',colors:['G'],set:'Core Box'},
-        {name:'Azorius Flyers',theme:'Skies',colors:['W','U'],set:'Duals A'},
-        {name:'Dimir Saboteurs',theme:'Ninjutsu',colors:['U','B'],set:'Duals A'},
-        {name:'Rakdos Spectacle',theme:'Aggro',colors:['B','R'],set:'Duals A'},
-        {name:'Gruul Smash',theme:'Stompy',colors:['R','G'],set:'Duals A'},
-        {name:'Selesnya Tokens',theme:'Go Wide',colors:['G','W'],set:'Duals A'},
-        {name:'Mardu Assault',theme:'Raid',colors:['R','W','B'],set:'Tri A'},
-        {name:'Temur Tempo',theme:'Prowess',colors:['G','U','R'],set:'Tri A'}
-      ].map(p=>({id:id(),...p}));
+ // ── Mono (Hydra Demo Mono)
+    { name:'Wrath of Hydras',     theme:'Big Stompy',               colors:['G'], set:'Hydra Demo Mono' },
+    { name:'Hydra Hatchlings',    theme:'Tokens that Grow',         colors:['G'], set:'Hydra Demo Mono' },
+    { name:'Primeval Hydra',      theme:'Ramp & Fight',             colors:['G'], set:'Hydra Demo Mono' },
+    { name:'Brainstorm Hydra',    theme:'Card Draw & X-Spells',     colors:['U'], set:'Hydra Demo Mono' },
+    { name:'Tidal Hydra',         theme:'Tempo & Tricks',           colors:['U'], set:'Hydra Demo Mono' },
+    { name:'Necrohydra',          theme:'Graveyard Recursion',      colors:['B'], set:'Hydra Demo Mono' },
+    { name:'Swamp Hydra',         theme:'Menace & Lifedrain',       colors:['B'], set:'Hydra Demo Mono' },
+    { name:'Blazing Hydra',       theme:'Burn & Haste',             colors:['R'], set:'Hydra Demo Mono' },
+    { name:'Ember Hydra',         theme:'Prowess & Firebreath',     colors:['R'], set:'Hydra Demo Mono' },
+    { name:'Solar Hydra',         theme:'Vigilance & Lifegain',     colors:['W'], set:'Hydra Demo Mono' },
+    { name:'Aegis Hydra',         theme:'Knights & Shields',        colors:['W'], set:'Hydra Demo Mono' },
+
+    // ── Two-color (Hydra Demo Duals)
+    { name:'Mystic Hydra',        theme:'Ramp & Draw (Simic)',      colors:['U','G'], set:'Hydra Demo Duals' },
+    { name:'Cytogrowth Hydra',    theme:'+1/+1 Counters (Simic)',   colors:['U','G'], set:'Hydra Demo Duals' },
+    { name:'Wildfire Hydra',      theme:'Stompy Aggro (Gruul)',     colors:['R','G'], set:'Hydra Demo Duals' },
+    { name:'Stampede Hydra',      theme:'Bloodrush & Fight',        colors:['R','G'], set:'Hydra Demo Duals' },
+    { name:'Sunbloom Hydra',      theme:'Tokens & Pump (Selesnya)', colors:['G','W'], set:'Hydra Demo Duals' },
+    { name:'Garden Hydra',        theme:'Go Wide Hydras',           colors:['G','W'], set:'Hydra Demo Duals' },
+    { name:'Stormscale Hydra',    theme:'Spells Matter (Izzet)',    colors:['U','R'], set:'Hydra Demo Duals' },
+    { name:'Arcflash Hydra',      theme:'Instants & Tricks',        colors:['U','R'], set:'Hydra Demo Duals' },
+    { name:'Venomous Hydra',      theme:'Deathtouch & Removal (Golgari)', colors:['B','G'], set:'Hydra Demo Duals' },
+    { name:'Rotwood Hydra',       theme:'Graveyard & Counters',     colors:['B','G'], set:'Hydra Demo Duals' },
+    { name:'Oathbound Hydra',     theme:'Aristocrats (Orzhov)',     colors:['W','B'], set:'Hydra Demo Duals' },
+    { name:'Skywarden Hydra',     theme:'Flyers & Control (Azorius)', colors:['W','U'], set:'Hydra Demo Duals' },
+    { name:'Sunfang Hydra',       theme:'Aggro Pump (Boros)',       colors:['W','R'], set:'Hydra Demo Duals' },
+    { name:'Bloodfire Hydra',     theme:'Madness & Burn (Rakdos)',  colors:['B','R'], set:'Hydra Demo Duals' },
+    { name:'Mindspore Hydra',     theme:'Sabotage & Draw (Dimir)',  colors:['U','B'], set:'Hydra Demo Duals' },
+
+    // ── Tri-color (Hydra Demo Tri) — for future-proof testing
+    { name:'Chromatic Hydra',     theme:'Ramp into Multicolor X',   colors:['G','U','R'], set:'Hydra Demo Tri' },
+    { name:'Shadowcoil Hydra',    theme:'Sneak & Recur',            colors:['U','B','G'], set:'Hydra Demo Tri' },
+    { name:'Pyrestorm Hydra',     theme:'Tokens & Pump Aggro',      colors:['R','W','G'], set:'Hydra Demo Tri' },
+    { name:'Celestial Hydra',     theme:'Value & ETB',              colors:['W','U','G'], set:'Hydra Demo Tri' }      ].map(p=>({id:id(),...p}));
       state.collection=demo; state.fair={}; saveAll(); resetSession(); state.settings.page=1; $('statusLine').textContent='Demo packs loaded.'; refreshStorageHealth(); log('Demo packs loaded (12).');
     });
 
