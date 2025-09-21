@@ -31,19 +31,32 @@
   function saveAll(){try{if(state.storageOK){localStorage.setItem(LS_KEY,JSON.stringify(state.collection));localStorage.setItem(LS_FAIR,JSON.stringify(state.fair));}setStorageStatus('ok');}catch(e){state.storageOK=false; setStorageStatus('limited');} renderEverything();}
 
   /* Storage Health Thing */
-  async function refreshStorageHealth(){
-    try{
-      const est=await (navigator.storage?.estimate?.()||Promise.resolve({usage:0,quota:5*1024*1024}));
-      const quota=est.quota||5*1024*1024; let lsBytes=0;
-      try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); const v=localStorage.getItem(k)||''; lsBytes+=(k.length+v.length)*2; } }catch{}
-      const usage=Math.max(est.usage||0,lsBytes);
-      const pct=Math.min(100,Math.round((usage/quota)*100));
-      $('storeBar').style.width=pct+'%';
-      $('storeLine').textContent=`Approx. used ${formatBytes(usage)} of ${formatBytes(quota)} (${pct}%)`;
-      $('storeHint').textContent=`Local to this device/browser. Private/Incognito may not persist.`;
-    }catch{ $('storeLine').textContent='Storage estimate unavailable.'; }
-  }
-  const formatBytes=n=>{if(!n)return'0 B';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return `${n.toFixed(n>=10||i===0?0:1)} ${u[i]}`;};
+  function formatBytes(n){
+  if(!n) return '0 B';
+  const u = ['B','KB','MB','GB'];
+  let i = 0;
+  while(n >= 1024 && i < u.length - 1){ n /= 1024; i++; }
+  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+async function refreshStorageHealth(){
+  let lsBytes = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      lsBytes += (k.length + v.length) * 2;
+    }
+  } catch { /* ignore this */ }
+
+  const LS_CAP = 5 * 1024 * 1024;
+  const pct = Math.min(100, Math.round((lsBytes / LS_CAP) * 100));
+
+  $('storeBar').style.width = pct + '%';
+  $('storeLine').textContent = `Using ${formatBytes(lsBytes)} of 5 MB (${pct}%)`;
+  $('storeHint').textContent = `Stored locally in your browser. Private/Incognito may not keep around.`;
+}
+
 
   /* Filters/Sort/Paging Stuff */
   function matchFilters(p){
