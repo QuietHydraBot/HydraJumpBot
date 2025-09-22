@@ -27,6 +27,17 @@ Add your own Jumpstart packs, roll randomized options, and build decks from your
 
 ---
 
-## 📦 Project Ideas
+## 📦 Update Plan
 - MTG Mana Icons (tho that can be risky)
 - Clean up the look, some parts are too tight
+- Pick colors with buttons to speed things up
+- Better color sorting to match WUBRG
+- Search filter
+- Draft history of decks made, maybe a win or lose metric
+- Usage stats to track whats getting drafted vs seen.
+- Light version... naww thats not as cool as dark ;D
+- Seed packs from community
+- Demo mode seeded with official core packs; JS20, JS22, JS Foundations
+- Save slots for multiple environments, load on drop down
+- Cloud backup
+- Pack ban toggle in collection; temp removal from enviroment
