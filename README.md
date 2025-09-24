@@ -27,10 +27,9 @@ Add your own Jumpstart packs, roll randomized options, and build decks from your
 
 ---
 
-## 📦 Update Plan ( X = Done )
+## 📦 Update Plan
 - MTG Mana Icons (tho that can be risky)
 - Clean up the look, some parts are too tight
-X Pick colors with buttons to speed things up
 - Better color sorting to match WUBRG
 - Search filter
 - Draft history of decks made, maybe a win or lose metric
