@@ -1,4 +1,12 @@
-/*********** Hydra Jump Bot - local build */
+/*********** 
+     ____.          .___      .__  /\         _________            .___             
+    |    | ____   __| _/____  |  |_)/  ______ \_   ___ \  ____   __| _/____ ___  ___
+    |    |/  _ \ / __ |\__  \ |  |  \ /  ___/ /    \  \/ /  _ \ / __ |/ __ \\  \/  /
+/\__|    (  <_> ) /_/ | / __ \|   Y  \\___ \  \     \___(  <_> ) /_/ \  ___/ >    < 
+\________|\____/\____ |(____  /___|  /____  >  \______  /\____/\____ |\___  >__/\_ \
+                     \/     \/     \/     \/          \/            \/    \/      \/                
+Hydra Jump Bot - JS local build by KayJ and friends*/
+
 (()=>{
   const LS_KEY='jumpstart_collection_v1';
   const LS_FAIR='jumpstart_fair_stats_v1';
@@ -75,11 +83,98 @@ async function refreshStorageHealth(){
     all.forEach(s=>{const id='setf_'+s.replace(/\W+/g,'_'), el=$(id); on(el,'change',()=>{ if(el.checked){ if(!state.settings.setFilter.includes(s)) state.settings.setFilter.push(s);} else { state.settings.setFilter=state.settings.setFilter.filter(x=>x!==s);} if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`; renderGuardrails(); renderCollection(); });});
     if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`;
   }
-  function renderColorFilter(){
-    const wrap=$('colorFilterBox'), colors=['W','U','B','R','G'];
-    wrap.innerHTML=colors.map(c=>{const id='cf_'+c, chk=state.settings.colorFilter.includes(c)?'checked':''; return `<label class="pill"><input type="checkbox" id="${id}" ${chk}><span>${c}</span></label>`;}).join('');
-    colors.forEach(c=>{const id='cf_'+c, el=$(id); on(el,'change',()=>{ if(el.checked){ if(!state.settings.colorFilter.includes(c)) state.settings.colorFilter.push(c);} else { state.settings.colorFilter=state.settings.colorFilter.filter(x=>x!==c);} const eligible=$('eligibleCount'); if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`; renderGuardrails(); state.settings.page=1; renderCollection(); });});
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function renderColorFilter(){
+  const wrap = $('colorFilterBox'), colors = ['W','U','B','R','G','C'];
+  wrap.innerHTML = colors.map(c=>{
+    const id = 'cf_'+c;
+    const chk = state.settings.colorFilter.includes(c) ? 'checked' : '';
+    // label.pill contains input + chip span (with color class)
+    return `
+      <label class="pill">
+        <input type="checkbox" id="${id}" ${chk} />
+        <span class="chip c ${c}">${c}</span>
+      </label>`;
+  }).join('');
+
+  colors.forEach(c=>{
+    const id='cf_'+c, el=$(id);
+    on(el,'change',()=>{
+      if(el.checked){
+        if(!state.settings.colorFilter.includes(c)) state.settings.colorFilter.push(c);
+      } else {
+        state.settings.colorFilter = state.settings.colorFilter.filter(x=>x!==c);
+      }
+      const eligible=$('eligibleCount');
+      if(eligible) eligible.textContent = `Eligible after filter: ${eligibleAfterFilter()}`;
+      renderGuardrails(); state.settings.page=1; renderCollection();
+    });
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   function offeredOf(p){return state.fair[p.id]?.offer||0;}
   function colorTypeRank(p){return p.colors.length;}
@@ -117,7 +212,38 @@ async function refreshStorageHealth(){
       </div>
     </div>`;
   }
-  function colorOptions(sel){const all=['','W','U','B','R','G']; return all.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'—'}</option>`).join('');}
+  
+  
+  
+  
+  
+  
+  
+  function colorOptions(sel){
+    const all=['','W','U','B','R','G','C']; 
+    return all.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'—'}</option>`).join('');
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   function bindPackRowButtons(){
     document.querySelectorAll('button[data-del]').forEach(b=>b.addEventListener('click',()=>{state.collection=state.collection.filter(p=>p.id!==b.dataset.del); saveAll();}));
     document.querySelectorAll('button[data-edit]').forEach(b=>b.addEventListener('click',()=>startInlineEdit(b.dataset.edit)));
@@ -277,9 +403,47 @@ async function refreshStorageHealth(){
       const dup=state.collection.some(p=>p.name.toLowerCase()===name.toLowerCase()&&JSON.stringify(p.colors)===JSON.stringify(colors)&&String(p.set||'').toLowerCase()===set.toLowerCase());
       if(dup) return alert('That pack (name + colors + set) already exists.');
       state.collection.push({id:uid(),name,theme:theme||null,colors,set:set||null}); saveAll(); state.settings.page=1;
-      ['packName','packTheme','packSet'].forEach(id=>$(id).value=''); ['color1','color2','color3'].forEach(id=>$(id).value='');
+      ['packName','packTheme','packSet'].forEach(id=>$(id).value='');
+      ['color1','color2','color3'].forEach(id=>$(id).value='');
+      window.resetManaSelection?.();
     });
-    on($('clearFormBtn'),'click',()=>{['packName','packTheme','packSet'].forEach(id=>$(id).value=''); ['color1','color2','color3'].forEach(id=>$(id).value='');});
+    on($('clearFormBtn'),'click',()=>{
+      ['packName','packTheme','packSet'].forEach(id=>$(id).value='');
+      ['color1','color2','color3'].forEach(id=>$(id).value='');
+      window.resetManaSelection?.();
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  });
 
     // Reset Offered Counters
     on($('resetOfferedBtn'),'click',()=>{
@@ -494,4 +658,165 @@ async function refreshStorageHealth(){
     // Init
     renderEverything(); resetSession(); updateView();
   });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// --- Mana grid wiring (row-filling buttons incl. Colorless) ---
+(function initManaGrid(){
+  function ready(fn){
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', fn, { once:true });
+    } else { fn(); }
+  }
+
+  ready(() => {
+    const grid = document.getElementById('manaGrid');        // <div id="manaGrid">…</div>
+    if (!grid) return;
+
+    const hint = document.getElementById('manaHint');         // <div id="manaHint">
+    const h1 = document.getElementById('color1');             // hidden inputs you already use
+    const h2 = document.getElementById('color2');
+    const h3 = document.getElementById('color3');
+
+    const ORDER = ['W','U','B','R','G','C']; // include Colorless
+
+    function getSelected(){
+      const sel = Array.from(grid.querySelectorAll('.mana-btn.selected')).map(b => b.dataset.color);
+      return ORDER.filter(c => sel.includes(c));
+    }
+    function syncHidden(){
+      const colors = getSelected();
+      h1.value = colors[0] || '';
+      h2.value = colors[1] || '';
+      h3.value = colors[2] || '';
+      if (hint){
+        const n = colors.length;
+        hint.textContent = n===0 ? 'Select 1–3 colors.'
+                      : n===1 ? 'Mono color.'
+                      : n===2 ? 'Two-color.'
+                      : 'Tri-color.';
+      }
+    }
+
+    // Click to toggle (max 3)
+    grid.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.mana-btn');
+      if (!btn || !grid.contains(btn)) return;
+      const isSelected = btn.classList.contains('selected');
+      const count = grid.querySelectorAll('.mana-btn.selected').length;
+      if (!isSelected && count >= 3){
+        if (hint) hint.textContent = 'You can select up to 3 colors.';
+        return;
+      }
+      btn.classList.toggle('selected');
+      btn.setAttribute('aria-pressed', btn.classList.contains('selected') ? 'true' : 'false');
+      syncHidden();
+    });
+
+    // Public reset used after adding/clearing the form
+    window.resetManaSelection = function resetManaSelection(){
+      grid.querySelectorAll('.mana-btn.selected').forEach(b=>{
+        b.classList.remove('selected');
+        b.setAttribute('aria-pressed','false');
+      });
+      h1.value = h2.value = h3.value = '';
+      if (hint) hint.textContent = 'Select 1–3 colors.';
+    };
+
+    // If hidden inputs already had values (edit flows), reflect in UI
+    [h1.value, h2.value, h3.value].filter(Boolean).forEach(c=>{
+      const btn = grid.querySelector(`.mana-btn[data-color="${c}"]`);
+      if (btn){ btn.classList.add('selected'); btn.setAttribute('aria-pressed','true'); }
+    });
+    syncHidden();
+  });
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 })();

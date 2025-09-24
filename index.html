@@ -62,19 +62,47 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
         <div class="row">
           <div><label>Pack Name</label><input id="packName" type="text" placeholder="e.g., Vampires — Life Leech"></div>
           <div><label>Theme (optional)</label><input id="packTheme" type="text" placeholder="e.g., Lifedrain"></div>
-        </div>
-        <div class="row">
-          <div><label>Color 1</label>
-            <select id="color1"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
-          </div>
-          <div><label>Color 2</label>
-            <select id="color2"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
-          </div>
-          <div><label>Color 3</label>
-            <select id="color3"><option value="">—</option><option>W</option><option>U</option><option>B</option><option>R</option><option>G</option></select>
-          </div>
           <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Core Box"></div>
+
         </div>
+
+<div class="row">
+  <div>
+    <!-- Active label (doubles as the dynamic hint) -->
+    <div class="tiny mana-label" id="manaHint">Select 1–3 colors.</div>
+
+    <!-- Mana grid (fills the row) -->
+    <div id="manaGrid"
+         class="mana-grid"
+         role="group"
+         aria-labelledby="manaHint"
+         aria-label="Choose 1 to 3 colors">
+      <button type="button" class="mana-btn c W" data-color="W" aria-pressed="false">W</button>
+      <button type="button" class="mana-btn c U" data-color="U" aria-pressed="false">U</button>
+      <button type="button" class="mana-btn c B" data-color="B" aria-pressed="false">B</button>
+      <button type="button" class="mana-btn c R" data-color="R" aria-pressed="false">R</button>
+      <button type="button" class="mana-btn c G" data-color="G" aria-pressed="false">G</button>
+      <button type="button" class="mana-btn c C" data-color="C" aria-pressed="false">C</button>
+    </div>
+
+    <!-- Hidden inputs (keep your existing add-pack JS working) -->
+    <input type="hidden" id="color1" value="">
+    <input type="hidden" id="color2" value="">
+    <input type="hidden" id="color3" value="">
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
         <div class="row">
           <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
           <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
