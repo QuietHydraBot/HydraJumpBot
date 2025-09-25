@@ -368,6 +368,18 @@ input[type=range] {
   align-items: center;
 }
 
+.usage{
+  font-size:10px;
+  color:var(--muted);
+  border:1px dashed var(--line);
+  padding:2px 8px;
+  border-radius:999px;
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+
 /* /////////////////////////////
   Options / Cards / Logs
 ///////////////////////////// */
@@ -727,4 +739,43 @@ summary { cursor: pointer; color: var(--muted); }
   display:block;
   margin-bottom:6px;
   margin-top: 8px;
+}
+
+
+
+
+
+
+
+
+
+
+/* --- Play Filters and Set/Box --- */
+.set-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap:8px;
+}
+.set-chip{
+  display:inline-flex; align-items:center; justify-content:space-between;
+  gap:8px; padding:8px 12px; border-radius:10px; cursor:pointer; user-select:none;
+  border:1px solid var(--line); background:#0e1116; color:#cfd6de;
+  transition:transform .12s ease, filter .12s ease, outline-color .12s ease;
+}
+.set-chip .count{ font-size:11px; color:var(--muted); }
+.set-chip.active{
+  outline:2px solid var(--cyan); outline-offset:2px;
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+/* Optional: make Play color filter buttons look exactly like the Collection mana buttons */
+#colorFilterBox{
+  margin: 10px 0 6px;
+  display:grid;
+  grid-template-columns:repeat(6, minmax(0,1fr));
+  gap:8px;
+}
+#colorFilterBox .mana-btn{
+  padding:10px 0;
 }

@@ -75,66 +75,102 @@ async function refreshStorageHealth(){
   function eligibleAfterFilter(){return state.collection.filter(matchFilters).length;}
   function computeSetCounts(){const m=new Map(); for(const p of state.collection){const k=p.set?p.set:'Unlabeled'; m.set(k,(m.get(k)||0)+1);} return m;}
 
-  function renderSetFilter(){
-    const counts=computeSetCounts(), all=Array.from(counts.keys()).sort((a,b)=>a.localeCompare(b));
-    const box=$('setFilterBox'), eligible=$('eligibleCount');
-    if(!all.length){ box.innerHTML='<div class="tiny">No sets yet.</div>'; state.settings.setFilter=[]; if(eligible) eligible.textContent='Eligible after filter: 0'; return; }
-    box.innerHTML=all.map(s=>{const id='setf_'+s.replace(/\W+/g,'_'); const chk=state.settings.setFilter.includes(s)?'checked':''; const count=counts.get(s)||0; return `<label class="pill"><input type="checkbox" id="${id}" ${chk}><span>${esc(s)} (${count})</span></label>`;}).join('');
-    all.forEach(s=>{const id='setf_'+s.replace(/\W+/g,'_'), el=$(id); on(el,'change',()=>{ if(el.checked){ if(!state.settings.setFilter.includes(s)) state.settings.setFilter.push(s);} else { state.settings.setFilter=state.settings.setFilter.filter(x=>x!==s);} if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`; renderGuardrails(); renderCollection(); });});
-    if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`;
+function renderSetFilter(){
+  const counts = computeSetCounts();
+  const all = Array.from(counts.keys()).sort((a,b)=>a.localeCompare(b));
+  const box = $('setFilterBox'), eligible=$('eligibleCount');
+
+  if(!box) return;
+
+  if(!all.length){
+    box.innerHTML='<div class="tiny">No sets yet.</div>';
+    state.settings.setFilter=[];
+    if(eligible) eligible.textContent='Eligible after filter: 0';
+    return;
   }
 
+  // Render as clickable chips with counts
+  box.classList.add('set-grid');
+  box.innerHTML = all.map(s=>{
+    const count = counts.get(s)||0;
+    const on = state.settings.setFilter.includes(s);
+    const id = 'setf_'+s.replace(/\W+/g,'_');
+    return `<div role="button" tabindex="0"
+                 class="set-chip ${on?'active':''}"
+                 id="${id}"
+                 aria-pressed="${on?'true':'false'}"
+                 data-set="${esc(s)}">
+              <span class="name">${esc(s)}</span>
+              <span class="count">${count}</span>
+            </div>`;
+  }).join('');
 
+  // Toggle handler (click + keyboard Space/Enter)
+  const toggle = (el)=>{
+    const s = el?.dataset?.set; if(!s) return;
+    const on = state.settings.setFilter.includes(s);
+    if(on){
+      state.settings.setFilter = state.settings.setFilter.filter(x=>x!==s);
+      el.classList.remove('active'); el.setAttribute('aria-pressed','false');
+    }else{
+      state.settings.setFilter.push(s);
+      el.classList.add('active'); el.setAttribute('aria-pressed','true');
+    }
+    if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`;
+    renderGuardrails(); renderCollection();
+  };
 
+  box.addEventListener('click', (e)=>{
+    const el = e.target.closest('.set-chip'); if(!el) return;
+    toggle(el);
+  }, { once:false });
 
+  box.addEventListener('keydown', (e)=>{
+    if(e.key===' ' || e.key==='Enter'){
+      const el = e.target.closest('.set-chip'); if(!el) return;
+      e.preventDefault();
+      toggle(el);
+    }
+  }, { once:false });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter()}`;
+}
 
 
 
 
 function renderColorFilter(){
-  const wrap = $('colorFilterBox'), colors = ['W','U','B','R','G','C'];
+  const wrap = $('colorFilterBox');
+  if(!wrap) return;
+  const colors = ['W','U','B','R','G','C'];
+
+  // Render 6 mana-style toggle buttons
   wrap.innerHTML = colors.map(c=>{
-    const id = 'cf_'+c;
-    const chk = state.settings.colorFilter.includes(c) ? 'checked' : '';
-    // label.pill contains input + chip span (with color class)
-    return `
-      <label class="pill">
-        <input type="checkbox" id="${id}" ${chk} />
-        <span class="chip c ${c}">${c}</span>
-      </label>`;
+    const on = state.settings.colorFilter.includes(c);
+    return `<button type="button"
+              class="mana-btn c ${c} ${on?'selected':''}"
+              data-color="${c}"
+              aria-pressed="${on?'true':'false'}">${c}</button>`;
   }).join('');
 
-  colors.forEach(c=>{
-    const id='cf_'+c, el=$(id);
-    on(el,'change',()=>{
-      if(el.checked){
-        if(!state.settings.colorFilter.includes(c)) state.settings.colorFilter.push(c);
-      } else {
-        state.settings.colorFilter = state.settings.colorFilter.filter(x=>x!==c);
-      }
-      const eligible=$('eligibleCount');
-      if(eligible) eligible.textContent = `Eligible after filter: ${eligibleAfterFilter()}`;
-      renderGuardrails(); state.settings.page=1; renderCollection();
-    });
-  });
+  // Event delegation: toggle selection, update state, refresh views
+  wrap.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.mana-btn');
+    if(!btn || !wrap.contains(btn)) return;
+    const c = btn.dataset.color;
+    const list = state.settings.colorFilter;
+    const idx = list.indexOf(c);
+
+    if(idx === -1){ list.push(c); }
+    else { list.splice(idx,1); }
+
+    btn.classList.toggle('selected');
+    btn.setAttribute('aria-pressed', btn.classList.contains('selected') ? 'true' : 'false');
+
+    const eligible=$('eligibleCount');
+    if(eligible) eligible.textContent = `Eligible after filter: ${eligibleAfterFilter()}`;
+    renderGuardrails(); state.settings.page=1; renderCollection();
+  }, { once:false });
 }
 
 
@@ -143,40 +179,29 @@ function renderColorFilter(){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   function offeredOf(p){return state.fair[p.id]?.offer||0;}
+  function pickedOf(p){ return state.fair[p.id]?.pick || 0; }
+function pickRateOf(p){
+  const off = offeredOf(p);
+  const pk  = pickedOf(p);
+  return off ? Math.round((pk / off) * 100) : 0;
+}
+function usageTag(p){
+  if(!state.settings.fairMode) return '';
+  return `<span class="usage">off: ${offeredOf(p)} · pick: ${pickedOf(p)} · ${pickRateOf(p)}%</span>`;
+}
+function ensureFairEntry(id){
+  if(!state.fair[id]) state.fair[id] = { offer:0, pick:0 };
+  if(typeof state.fair[id].offer !== 'number') state.fair[id].offer = Number(state.fair[id].offer)||0;
+  if(typeof state.fair[id].pick  !== 'number') state.fair[id].pick  = Number(state.fair[id].pick)||0;
+}
+function incPick(p){
+  if(!state.settings.fairMode) return;
+  ensureFairEntry(p.id);
+  state.fair[p.id].pick++;
+  saveAll();
+}
+
   function colorTypeRank(p){return p.colors.length;}
   function comparePacks(a,b){const dir=state.settings.sortDir==='asc'?1:-1; let r=0; switch(state.settings.sortBy){
     case 'name': r=a.name.localeCompare(b.name); break;
@@ -195,54 +220,28 @@ function renderColorFilter(){
     $('jumpPage').max=pages; $('jumpPage').value=state.settings.page;
   }
   function offerTag(p){ if(!state.settings.fairMode) return ''; const c=offeredOf(p); return `<span class="offer">offered: ${c}</span>`; }
-  function packRowHtml(p){
-    return `<div class="pack" id="row_${p.id}">
-      <div class="pill">
-        <strong>${esc(p.name)}</strong>
-        <div class="meta">
-          ${p.theme?`<span class="theme">${esc(p.theme)}</span>`:''}
-          ${chips(p.colors)} ${typeChip(p)}
-          ${p.set?`<span class="tag">${esc(p.set)}</span>`:'<span class="tag">Unlabeled</span>'}
-          ${offerTag(p)}
-        </div>
+function packRowHtml(p){
+  return `<div class="pack" id="row_${p.id}">
+    <div class="pill">
+      <strong>${esc(p.name)}</strong>
+      <div class="meta">
+        ${p.theme?`<span class="theme">${esc(p.theme)}</span>`:''}
+        ${chips(p.colors)} ${typeChip(p)}
+        ${p.set?`<span class="tag">${esc(p.set)}</span>`:'<span class="tag">Unlabeled</span>'}
+        ${usageTag(p)}
       </div>
-      <div class="pill">
-        <button class="btn btn-gray" data-edit="${p.id}">Edit</button>
-        <button class="btn btn-danger" data-del="${p.id}">Delete</button>
-      </div>
-    </div>`;
-  }
-  
-  
-  
-  
-  
-  
-  
+    </div>
+    <div class="pill">
+      <button class="btn btn-gray" data-edit="${p.id}">Edit</button>
+      <button class="btn btn-danger" data-del="${p.id}">Delete</button>
+    </div>
+  </div>`;
+}
+ 
   function colorOptions(sel){
     const all=['','W','U','B','R','G','C']; 
     return all.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'—'}</option>`).join('');
   }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   
   function bindPackRowButtons(){
     document.querySelectorAll('button[data-del]').forEach(b=>b.addEventListener('click',()=>{state.collection=state.collection.filter(p=>p.id!==b.dataset.del); saveAll();}));
@@ -314,7 +313,16 @@ function renderColorFilter(){
   }
 
   /* RNG Fairness */
-  function incOfferCounts(packs){ if(!state.settings.fairMode) return; for(const p of packs){ if(!state.fair[p.id]) state.fair[p.id]={offer:0}; state.fair[p.id].offer++; } saveAll(); }
+function incOfferCounts(packs){
+  if(!state.settings.fairMode) return;
+  for(const p of packs){
+    ensureFairEntry(p.id);
+    state.fair[p.id].offer++;
+  }
+  saveAll();
+}
+
+
   const fairWeight=p=>1/(1+(state.fair[p.id]?.offer||0));
 
   /* Pools To Pool */
@@ -337,15 +345,15 @@ function renderColorFilter(){
   }
 
   /* Option card */
-  function renderOptionCard(p){
-    return `<div><strong>${esc(p.name)}</strong>
-      <div class="meta">
-        ${p.theme?`<span class="theme">${esc(p.theme)}</span>`:''}
-        ${chips(p.colors)} ${typeChip(p)}
-        ${p.set?`<span class="tag">${esc(p.set)}</span>`:'<span class="tag">Unlabeled</span>'}
-        ${state.settings.fairMode?`<span class="offer">offered: ${offeredOf(p)}</span>`:''}
-      </div></div>`;
-  }
+function renderOptionCard(p){
+  return `<div><strong>${esc(p.name)}</strong>
+    <div class="meta">
+      ${p.theme?`<span class="theme">${esc(p.theme)}</span>`:''}
+      ${chips(p.colors)} ${typeChip(p)}
+      ${p.set?`<span class="tag">${esc(p.set)}</span>`:'<span class="tag">Unlabeled</span>'}
+      ${usageTag(p)}
+    </div></div>`;
+}
   function renderOptions(containerId,packs,onPick){
     const el=$(containerId);
     el.innerHTML = packs.map(p=>`<div class="option">${renderOptionCard(p)}<div class="pill"><button class="btn btn-pink" data-pick="${p.id}">Choose</button></div></div>`).join('');
@@ -384,16 +392,42 @@ function renderColorFilter(){
     $('chosenFirstWrap').style.display='none'; $('finalPairWrap').style.display='none'; $('overlapWrap').style.display='none';
     $('statusLine').textContent='No session yet.'; $('log').innerHTML=''; renderGuardrails();
   }
-  function updateView(){ const v=state.settings.view; $('collectionCard').classList.toggle('hidden',v!=='collection'); $('playCard').classList.toggle('hidden',v!=='play'); $('btnViewCollection').classList.toggle('active',v==='collection'); $('btnViewPlay').classList.toggle('active',v==='play'); }
+
+function updateView(){
+  const v = state.settings.view;
+  $('collectionCard').classList.toggle('hidden', v!=='collection');
+  $('playCard').classList.toggle('hidden', v!=='play');
+  $('statsCard').classList.toggle('hidden', v!=='stats');
+
+  $('btnViewCollection').classList.toggle('active', v==='collection');
+  $('btnViewPlay').classList.toggle('active', v==='play');
+  $('btnViewStats').classList.toggle('active', v==='stats');
+
+  if(v==='stats') renderStatsPanel(); // refresh when entering stats thing
+}
+
+
   function renderEverything(){ renderCollection(); renderSetFilter(); renderColorFilter(); renderGuardrails(); refreshStorageHealth(); }
 
   /* DOM Ready */
   document.addEventListener('DOMContentLoaded',()=>{
     state.collection=loadCollection(); state.fair=loadFair();
+// Backfill older fair entries that only had { offer }
+for(const id of Object.keys(state.fair||{})){
+  ensureFairEntry(id);
+}
 
     // View switch
-    on($('btnViewCollection'),'click',()=>{state.settings.view='collection'; updateView();});
-    on($('btnViewPlay'),'click',()=>{state.settings.view='play'; updateView();});
+    on($('btnViewCollection'),'click',()=>{
+      state.settings.view='collection'; updateView();
+    });
+    on($('btnViewPlay'),'click',()=>{
+      state.settings.view='play'; updateView();
+    });
+    on($('btnViewStats'),'click',()=>{
+      state.settings.view='stats'; updateView();
+    });
+
 
     // Add/manage packs
     on($('addPackBtn'),'click',()=>{
@@ -411,37 +445,6 @@ function renderColorFilter(){
       ['packName','packTheme','packSet'].forEach(id=>$(id).value='');
       ['color1','color2','color3'].forEach(id=>$(id).value='');
       window.resetManaSelection?.();
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   
   });
 
@@ -464,6 +467,26 @@ function renderColorFilter(){
     on($('exportCsvBtn'),'click',()=>{ const csv=toCSV(state.collection); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='jumpstart_collection.csv'; a.click(); URL.revokeObjectURL(url); });
     on($('importCsvBtn'),'click',()=>$('importFileCsv').click());
     on($('importFileCsv'),'change',async e=>{const f=e.target.files?.[0]; if(!f) return; try{const text=await f.text(); const rows=parseCSV(text); if(!rows.length) return alert('No valid rows found.'); state.collection=rows; saveAll(); resetSession(); e.target.value=''; state.settings.page=1; alert(`Imported ${rows.length} packs from CSV.`);}catch(err){ alert('CSV import failed: '+err.message);} });
+    on($('exportUsageCsvBtn'),'click',()=>{
+  const csv = usageToCSV();
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'jumpstart_usage.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+on($('resetPicksBtn'),'click',()=>{
+  if(!confirm('Reset all PICK counters to 0? (Offered counters unchanged)')) return;
+  for(const id of Object.keys(state.fair||{})){
+    if(!state.fair[id]) state.fair[id] = { offer:0, pick:0 };
+    state.fair[id].pick = 0;
+  }
+  saveAll();
+  const s=$('statusLine'); if(s) s.textContent='Pick counters reset.';
+  renderStatsPanel();
+});
+
 
     // Second-roll / RNG settings
     on($('excludeUnpicked'),'change',e=>state.settings.excludeUnpicked=e.target.checked);
@@ -493,8 +516,12 @@ function renderColorFilter(){
       resetSession();
       const sample=state.settings.fairMode?weightedSample(base,N,fairWeight):pickRandom(base,N);
       state.session.firstOptions=sample; incOfferCounts(sample);
-      renderOptions('firstOptions',sample,(p)=>{
-        state.session.chosenFirst=p; state.session.usedIds.add(p.id);
+
+renderOptions('firstOptions',sample,(p)=>{
+  state.session.chosenFirst=p;
+  incPick(p);
+  state.session.usedIds.add(p.id);
+
         $('chosenFirstWrap').style.display=''; $('chosenFirst').innerHTML=`<div class="option">${renderOptionCard(p)}</div>`;
         $('statusLine').textContent='First choice locked. Now roll the second set.'; log(`Picked first: "${p.name}" [${p.colors.join('')}]`);
         const oSel=$('overlapColor'), oWrap=$('overlapWrap');
@@ -548,7 +575,21 @@ function renderColorFilter(){
       }
       const final=shuffle(uniq).slice(0,N); state.session.secondOptions=final; final.forEach(p=>state.session.usedIds.add(p.id)); incOfferCounts(final);
       $('secondOptions').innerHTML=final.map(p=>`<div class="option">${renderOptionCard(p)}<div class="pill"><button class="btn btn-pink" data-pick="${p.id}">Choose</button></div></div>`).join('');
-      final.forEach(p=>{const b=$('secondOptions').querySelector(`button[data-pick="${p.id}"]`); b?.addEventListener('click',()=>{state.session.chosenSecond=p; $('finalPairWrap').style.display=''; const a=state.session.chosenFirst; $('finalPair').innerHTML=`<div class="option">${renderOptionCard(a)}</div><div class="option">${renderOptionCard(p)}</div>`; $('statusLine').textContent='Final pair ready!'; log(`Picked second: "${p.name}" [${p.colors.join('')}]`);});});
+      final.forEach(p=>{const b=$('secondOptions').querySelector(`button[data-pick="${p.id}"]`); 
+      
+b?.addEventListener('click',()=>{
+  state.session.chosenSecond=p;
+  incPick(p);                        // NEW
+  $('finalPairWrap').style.display='';
+  const a=state.session.chosenFirst;
+  $('finalPair').innerHTML=`<div class="option">${renderOptionCard(a)}</div><div class="option">${renderOptionCard(p)}</div>`;
+  $('statusLine').textContent='Final pair ready!';
+  log(`Picked second: "${p.name}" [${p.colors.join('')}]`);
+});
+  
+  });
+
+
       $('statusLine').textContent=`Second options rolled (${N}). Pick one. ${note}`; log(`Rolled second ${N} options${note?' '+note:''}.`);
     }
 
@@ -572,6 +613,8 @@ function renderColorFilter(){
         })();
         const second=(state.settings.fairMode?weightedSample(genSecond,1,fairWeight):pickRandom(genSecond,1))[0];
         if(!second){ alert('Could not find a valid second pick for a player.'); break; }
+        incPick(first);                     // NEW?
+        incPick(second);                    // NEW?
         if(avoid) tmpUsed.add(second.id);
         out.push({first,second}); incOfferCounts([first, ...genSecond]); incOfferCounts([second]); state.session=saver;
       }
@@ -658,23 +701,6 @@ function renderColorFilter(){
     // Init
     renderEverything(); resetSession(); updateView();
   });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // --- Mana grid wiring (row-filling buttons incl. Colorless) ---
 (function initManaGrid(){
@@ -764,31 +790,144 @@ function renderColorFilter(){
 
 
 
+function safePct(n, d){ return d ? Math.round((n/d)*100) : 0; }
 
+function computeUsageStats(){
+  const packs = state.collection || [];
+  const fair  = state.fair || {};
 
+  const rows = packs.map(p=>{
+    const f = fair[p.id] || {};
+    const offer = Number(f.offer)||0;
+    const pick  = Number(f.pick)||0;
+    return { id:p.id, name:p.name, set:p.set||'Unlabeled', colors:p.colors.slice(), ctype:p.colors.length, offer, pick, pr:safePct(pick, offer) };
+  });
 
+  const totalPacks   = rows.length;
+  const totalOffered = rows.reduce((a,r)=>a+r.offer,0);
+  const totalPicked  = rows.reduce((a,r)=>a+r.pick,0);
+  const overallPR    = safePct(totalPicked, totalOffered);
+  const zeroOffered  = rows.filter(r=>r.offer===0).length;
+  const zeroPicked   = rows.filter(r=>r.offer>0 && r.pick===0).length;
 
+  const colorOrder = ['W','U','B','R','G','C'];
+  const byColor = Object.fromEntries(colorOrder.map(c=>[c,0]));
+  rows.forEach(r=> r.colors.forEach(c=>{ if(byColor[c]!==undefined) byColor[c]++; }));
 
+  const byCtype = { mono:0, bi:0, tri:0 };
+  rows.forEach(r=>{
+    if(r.ctype===1) byCtype.mono++;
+    else if(r.ctype===2) byCtype.bi++;
+    else if(r.ctype===3) byCtype.tri++;
+  });
 
+  const bySet = new Map();
+  rows.forEach(r=>{
+    const key = r.set || 'Unlabeled';
+    if(!bySet.has(key)) bySet.set(key, { set:key, packs:0, offer:0, pick:0 });
+    const s = bySet.get(key);
+    s.packs++; s.offer+=r.offer; s.pick+=r.pick;
+  });
+  const bySetArr = Array.from(bySet.values()).map(s=>({ ...s, pr:safePct(s.pick, s.offer)}))
+                       .sort((a,b)=> b.packs - a.packs);
 
+  const topN = 5, minOffers = 5;
+  const topOffered = rows.slice().sort((a,b)=> b.offer - a.offer).slice(0, topN);
+  const topPicked  = rows.slice().sort((a,b)=> b.pick  - a.pick ).slice(0, topN);
+  const topPickRate = rows.filter(r=>r.offer>=minOffers)
+                          .sort((a,b)=> b.pr - a.pr)
+                          .slice(0, topN);
 
+  return {
+    totalPacks, totalOffered, totalPicked, overallPR, zeroOffered, zeroPicked,
+    byColor, byCtype, bySetArr, topOffered, topPicked, topPickRate
+  };
+}
 
+function renderStatsPanel(){
+  const host = document.getElementById('statsPanel');
+  if(!host) return;
 
+  const s = computeUsageStats();
+  const colorOrder = ['W','U','B','R','G','C'];
+  const colorChips = colorOrder.map(c=>`<span class="c ${c}">${c}: ${s.byColor[c]||0}</span>`).join('');
+  const setList = s.bySetArr.slice(0,8).map(x=>{
+    return `<li><span class="lhs">${esc(x.set)} — ${x.packs} packs</span><span class="rhs">${x.pick}/${x.offer} • ${x.pr}%</span></li>`;
+  }).join('') || `<li><span class="lhs">No data</span><span class="rhs">–</span></li>`;
+  const lb = (arr)=> arr.map(r=>{
+    const meta = `${r.colors.join('')} • ${r.set}`;
+    return `<li>
+      <span class="lhs"><strong>${esc(r.name)}</strong> <span class="tiny">(${esc(meta)})</span></span>
+      <span class="rhs">${r.pick}/${r.offer}${r.offer?` • ${r.pr}%`:''}</span>
+    </li>`;
+  }).join('') || `<li><span class="lhs">No data</span><span class="rhs">–</span></li>`;
 
+  host.innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="label">Packs</div><div class="value">${s.totalPacks}</div></div>
+      <div class="kpi"><div class="label">Offered</div><div class="value">${s.totalOffered}</div></div>
+      <div class="kpi"><div class="label">Picked</div><div class="value">${s.totalPicked}</div></div>
+      <div class="kpi"><div class="label">Overall Pick-Rate</div><div class="value">${s.overallPR}%</div></div>
+      <div class="kpi"><div class="label">Never Offered</div><div class="value">${s.zeroOffered}</div></div>
+      <div class="kpi"><div class="label">Never Picked (offered)</div><div class="value">${s.zeroPicked}</div></div>
+    </div>
 
+    <div class="stats-grid">
+      <div class="mini-table">
+        <h4>By Color (pack count)</h4>
+        <div class="colors">${colorChips}</div>
+        <div class="meta" style="margin-top:6px">
+          <span class="ctype mono">Mono: ${s.byCtype.mono}</span>
+          <span class="ctype bi">Two-Color: ${s.byCtype.bi}</span>
+          <span class="ctype tri">Tri-Color: ${s.byCtype.tri}</span>
+        </div>
+      </div>
 
+      <div class="mini-table">
+        <h4>By Set / Box (top 8)</h4>
+        <ul>${setList}</ul>
+      </div>
 
+      <div class="mini-table">
+        <h4>Top Offered</h4>
+        <ul>${lb(s.topOffered)}</ul>
+      </div>
 
+      <div class="mini-table">
+        <h4>Top Picked</h4>
+        <ul>${lb(s.topPicked)}</ul>
+      </div>
 
+      <div class="mini-table">
+        <h4>Best Pick-Rate (≥5 offers)</h4>
+        <ul>${lb(s.topPickRate)}</ul>
+      </div>
+    </div>
+  `;
+}
 
+function usageToCSV(){
+  const rows = state.collection.map(p=>{
+    const f = state.fair[p.id] || {};
+    const offer = Number(f.offer)||0;
+    const pick  = Number(f.pick)||0;
+    const pr    = offer ? Math.round((pick/offer)*100) : 0;
+    return {
+      id:p.id, name:p.name, theme:p.theme||'', colors:(p.colors||[]).join(';'), set:p.set||'',
+      offered:offer, picked:pick, pick_rate_pct:pr
+    };
+  });
 
-
-
-
-
-
-
-
+  const header = Object.keys(rows[0]||{
+    id:'',name:'',theme:'',colors:'',set:'',offered:0,picked:0,pick_rate_pct:0
+  });
+  const escCSV = (v)=> {
+    const s=String(v??'');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const body = rows.map(r=> header.map(h=>escCSV(r[h])).join(',')).join('\n');
+  return header.join(',')+'\n'+body;
+}
 
 
 

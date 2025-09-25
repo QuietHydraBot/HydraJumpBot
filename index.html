@@ -31,6 +31,7 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
   <div class="switcher">
     <button id="btnViewCollection" class="active">Collection</button>
     <button id="btnViewPlay">Play</button>
+    <button id="btnViewStats">Stats</button>
   </div>
 </header>
 
@@ -91,18 +92,6 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
     <input type="hidden" id="color3" value="">
   </div>
 </div>
-
-
-
-
-
-
-
-
-
-
-
-
         <div class="row">
           <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
           <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
@@ -279,6 +268,19 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
 
     </div>
   </section>
+
+  <!-- STATS -->
+<section class="card hidden" id="statsCard">
+  <h2>Stats & Usage</h2>
+  <div class="content">
+    <div id="statsPanel" class="content"></div>
+    <div class="row">
+      <button class="btn btn-gray" id="exportUsageCsvBtn">Export Usage CSV</button>
+      <button class="btn btn-danger" id="resetPicksBtn" title="Set all pick counters back to 0">Reset Pick Counters</button>
+    </div>
+  </div>
+</section>
+
 
 </main>
 
