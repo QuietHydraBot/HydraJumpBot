@@ -33,7 +33,7 @@ Add your own Jumpstart packs, roll randomized options, and build decks from your
 - Better color sorting to match WUBRG
 - Search filter
 - Draft history of decks made, maybe a win or lose metric
-- Usage stats to track whats getting drafted vs seen.
+- Usage stats to track whats getting drafted vs seen. <-------- WORKING ON NOW
 - Light version... naww thats not as cool as dark ;D
 - Seed packs from community
 - Demo mode seeded with official core packs; JS20, JS22, JS Foundations
