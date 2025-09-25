@@ -450,10 +450,10 @@ for(const id of Object.keys(state.fair||{})){
 
     // Reset Offered Counters
     on($('resetOfferedBtn'),'click',()=>{
-      if(!confirm('Reset all offered counters to 0? (Your packs stay intact)')) return;
+      if(!confirm('Reset all counters to 0? (Your packs stay intact)')) return;
       state.fair = {};
       saveAll();
-      const s=$('statusLine'); if(s) s.textContent='Offered counters reset.';
+      const s=$('statusLine'); if(s) s.textContent='Counters reset.';
     });
 
     // Wipe collection (and fair stats)
