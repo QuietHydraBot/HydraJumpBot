@@ -21,22 +21,29 @@ Add your own Jumpstart packs, roll randomized options, and build decks from your
 
 ## 🚀 How to Use
 1. Visit the site [Hydra Jump Bot](https://quiethydra.com/jumpbot/).
-2. Aadd your packs.
+2. Add your packs.
 3. Use the Play panel to draft and select packs.
 4. Export your collection regularly to back it up!!!!!
 
 ---
 
-## 📦 Update Plan
+## 📦 Phase I Update Plan
 - MTG Mana Icons (tho that can be risky)
 - Clean up the look, some parts are too tight
 - Better color sorting to match WUBRG
 - Search filter
 - Draft history of decks made, maybe a win or lose metric
-- Usage stats to track whats getting drafted vs seen. <-------- WORKING ON NOW
-- Light version... naww thats not as cool as dark ;D
-- Seed packs from community
-- Demo mode seeded with official core packs; JS20, JS22, JS Foundations
+- Light version... naww thats not as cool as dark
+- Seed packs from the community
+- Demo mode seeded with official core packs; JS20, JS22, JS Foundations, and JumpIn
 - Save slots for multiple environments, load on drop down
 - Cloud backup
-- Pack ban toggle in collection; temp removal from enviroment
+- Pack ban toggle in collection; temp removal from environment
+- Pack List
+- Inograte with Scryfall
+- Export drafted pack to Arena/Magic Online/MTG Forge
+
+## Phase II
+
+
+## Phase III
