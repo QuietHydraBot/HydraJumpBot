@@ -69,6 +69,8 @@ body {
   color: var(--muted);
 }
 
+.badge#appVersion { opacity: .9; }
+
 .ok   {
   color:#7ef09a; border-color:#1f3a2c;
 }
@@ -380,6 +382,62 @@ input[type=range] {
   gap:6px;
 }
 
+
+/* Collapsible subfilter blocks */
+details.subfilter {
+  border: 1px solid var(--line, #2a2d31);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--panel, transparent);
+}
+
+details.subfilter > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* custom chevron thing - - Might not keep */
+details.subfilter > summary::after {
+  content: '▸';
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+  opacity: 0.8;
+}
+details.subfilter[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+/* Make chips compact */
+.set-grid .set-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--line, #2a2d31);
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  cursor: pointer;
+  background: transparent;
+}
+
+.set-grid .set-chip .name { opacity: 0.95; }
+.set-grid .set-chip .count {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.set-grid .set-chip.active {
+  background: var(--chip-on, #1e2633);
+  border-color: var(--chip-on-border, #304050);
+}
+
+
 /* /////////////////////////////
   Options / Cards / Logs
 ///////////////////////////// */
@@ -513,7 +571,6 @@ summary { cursor: pointer; color: var(--muted); }
   font-size: 12px;
 }
 
-/* Pager row */
 .pager {
   display: flex;
   gap: 8px;
@@ -741,15 +798,6 @@ summary { cursor: pointer; color: var(--muted); }
   margin-top: 8px;
 }
 
-
-
-
-
-
-
-
-
-
 /* --- Play Filters and Set/Box --- */
 .set-grid{
   display:grid;
@@ -769,7 +817,6 @@ summary { cursor: pointer; color: var(--muted); }
   filter: brightness(1.05);
 }
 
-/* Optional: make Play color filter buttons look exactly like the Collection mana buttons */
 #colorFilterBox{
   margin: 10px 0 6px;
   display:grid;
@@ -778,4 +825,240 @@ summary { cursor: pointer; color: var(--muted); }
 }
 #colorFilterBox .mana-btn{
   padding:10px 0;
+}
+
+/* --- 
+
+Scryfall add in
+
+--- */
+.ac-wrap { position: relative; }
+.ac-list {
+  position: absolute; left:0; right:0; top:100%;
+  z-index: 60; background:#0f1013; border:1px solid var(--line);
+  border-radius:8px; margin-top:4px; max-height:180px; overflow:auto;
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+.ac-item { padding:8px 10px; cursor:pointer; }
+.ac-item:hover, .ac-item.active { background:#15171b; }
+.ac-empty { padding:8px 10px; color: var(--muted); }
+
+/* --- 
+
+popup
+
+--- */
+
+.modal.hidden{ display:none !important; }
+.modal{
+  position:fixed; inset:0; z-index:2000;
+  background: rgba(0,0,0,.55);
+  display:flex; align-items:center; justify-content:center;
+  padding:16px;
+}
+.modal-inner{
+  width:min(720px, calc(100vw - 40px));
+  background: var(--card);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+/* autosuggest loading thing */
+.ac-list .ac-loading{
+  padding:6px 8px;
+  font-size:12px;
+  opacity:.75;
+}
+
+/* COLLECTION: Set/Box chips compact */
+#colSetFilterBox.set-grid {
+  display: flex !important;      
+  flex-wrap: nowrap;          
+  gap: 6px;
+  overflow-x: auto;           
+  padding: 4px 0;
+  align-items: center;
+  scrollbar-width: thin;      
+}
+
+/* Smaller pill buttons */
+#colSetFilterBox .set-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Tighter count and keep names from stretching to much */
+#colSetFilterBox .set-chip .name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#colSetFilterBox .set-chip .count {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: .8;
+}
+
+#colColorFilterBox .mana-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 28px;
+}
+
+
+/* Make Theme and Tag chips compact*/
+#themeFilterBox.set-grid,
+#tagFilterBox.set-grid {
+  gap: 8px;
+}
+
+#themeFilterBox .set-chip,
+#tagFilterBox .set-chip {
+  font-size: 0.85rem;      
+  padding: 4px 8px;         
+  border-radius: 10px;      
+  line-height: 1.2;
+}
+
+/* keep counts not stand out so much */
+#themeFilterBox .set-chip .count,
+#tagFilterBox .set-chip .count {
+  opacity: 0.7;
+  font-weight: 600;
+  margin-left: 6px;
+  font-size: 0.8em;
+}
+
+/* keep inline controls tight and aligned */
+.group-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Compact chip-like select */
+.compact-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--line, #2a2d31);
+  border-radius: 999px;
+  background:
+    var(--chip-bg, rgba(255,255,255,0.04))
+    url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7l5 6 5-6' fill='none' stroke='currentColor' stroke-width='2'/%3E%3C/svg%3E")
+    no-repeat right 8px center / 12px 12px;
+  color: inherit;
+  cursor: pointer;
+  min-height: 28px;
+}
+.compact-select:hover {
+  border-color: #3a3f45;
+}
+.compact-select:focus {
+  outline: 2px solid #51a7ff;
+  outline-offset: 2px;
+}
+.compact-select::-ms-expand { display: none; } /* old IE */
+
+/* Chip toggle group for Types */
+.chip-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Hide the native checkbox but keep it useable */
+.chipcheck {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* The mighty chip itself */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid var(--line, #2a2d31);
+  border-radius: 999px;
+  background: var(--chip-bg, rgba(255,255,255,0.04));
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+/* Hover/active/selected states */
+.chip:hover {
+  border-color: #3a3f45;
+}
+.chip:active {
+  transform: translateY(0.5px);
+}
+
+/* When the hidden checkbox is checked, style the chip as selected */
+.chipcheck:checked + .chip {
+  background: var(--chip-on, #103b27);
+  border-color: #2b6b4b;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+
+/* Focus ring for keyboard nav */
+.chipcheck:focus-visible + .chip,
+.chip:focus-visible {
+  outline: 2px solid #51a7ff;
+  outline-offset: 2px;
+}
+
+/* match disabled styling if ever disabled */
+.chip[aria-disabled="true"],
+.chip.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* put Mode and Types on a new line under the color and lets it span full width */
+.below-colors {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+
+.group-inline {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+
+details.subfilter.search-help > summary::after {
+  content: '▸';
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+  opacity: 0.8;
+  margin-left: 6px;
+}
+details.subfilter.search-help[open] > summary::after {
+  transform: rotate(90deg);
 }
