@@ -31,17 +31,13 @@ Add your own Jumpstart packs, roll randomized options, and build decks from your
 - MTG Mana Icons (tho that can be risky)
 - Clean up the look, some parts are too tight
 - Better color sorting to match WUBRG
-- Search filter
-- Draft history of decks made, maybe a win or lose metric
 - Light version... naww thats not as cool as dark
 - Seed packs from the community
-- Demo mode seeded with official core packs; JS20, JS22, JS Foundations, and JumpIn
+- Seeds with official core packs; JS20, JS22, JS Foundations, and JumpIn
 - Save slots for multiple environments, load on drop down
 - Cloud backup
 - Pack ban toggle in collection; temp removal from environment
-- Pack List
-- Inograte with Scryfall
-- Export drafted pack to Arena/Magic Online/MTG Forge
+- Inograte with Scryfall images
 
 ## Phase II
 
