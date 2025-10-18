@@ -1,15 +1,33 @@
-/* /////////////////////////////
-__        __  _   _   ____    ____     ____ 
-\ \      / / | | | | | __ )  |  _ \   / ___|
- \ \ /\ / /  | | | | |  _ \  | |_) | | |  _ 
-  \ V  V /   | |_| | | |_) | |  _ <  | |_| |
-   \_/\_/     \___/  |____/  |_| \_\  \____|
+/* 
+    /$$$$$                                         /$$$$$$$              /$$    
+   |__  $$                                        | $$__  $$            | $$    
+      | $$ /$$   /$$ /$$$$$$/$$$$   /$$$$$$       | $$  \ $$  /$$$$$$  /$$$$$$  
+      | $$| $$  | $$| $$_  $$_  $$ /$$__  $$      | $$$$$$$  /$$__  $$|_  $$_/  
+ /$$  | $$| $$  | $$| $$ \ $$ \ $$| $$  \ $$      | $$__  $$| $$  \ $$  | $$    
+| $$  | $$| $$  | $$| $$ | $$ | $$| $$  | $$      | $$  \ $$| $$  | $$  | $$ /$$
+|  $$$$$$/|  $$$$$$/| $$ | $$ | $$| $$$$$$$/      | $$$$$$$/|  $$$$$$/  |  $$$$/
+ \______/  \______/ |__/ |__/ |__/| $$____/       |_______/  \______/    \___/  
+                                  | $$                                          
+                                  | $$                                          
+                                  |__/                                          */
+/*
+FILE: app.css — Hydra Jump Bot
+  PURPOSE: Theme tokens & components
+  SECTIONS:
+    [T] Theme tokens (colors, spacing)
+    [L] Layout & containers
+    [C] Components (UI parts: header, chips, lists, modals, stats)
+    [U] Utilities/helpers
+  KEY:
+    .subfilter          collapsible filter card
+    .chip/.chipcheck    toggleable chips
+    .mana-btn           color selector buttons
+    #colorFilterBox     color chip container (see OVERRIDE notes below)
+*/
 
-   ///////////////////////////// */
 
-/* /////////////////////////////
-   Base Style
-///////////////////////////// */
+
+/* ── [T] Theme tokens (colors, spacing) ─────────────────── */
 :root {
   --bg:#0b0b0c;
   --fg:#e9eef3;
@@ -38,9 +56,9 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
 }
 
-/* /////////////////////////////
-   Header
-///////////////////////////// */
+
+
+/* ── [C] Components: header, badges, view switcher ──────── */
 .hdr {
   position: sticky;
   top: 0;
@@ -81,7 +99,6 @@ body {
   color:#ff7373; border-color:#5a2a2a; 
 }
 
-/* View switcher */
 .switcher {
   margin-left: auto;
   display: flex;
@@ -108,9 +125,9 @@ body {
   outline-offset: 2px;
 }
 
-/* /////////////////////////////
-   Layout
-///////////////////////////// */
+
+
+/* ── [L] Layout & containers ─────────────────────────────── */
 .wrap {
   max-width: 1250px;
   margin: 20px auto;
@@ -168,9 +185,42 @@ input[type=range] {
 
 .row > * { flex: 1; }
 
-/* /////////////////////////////
-   Buttons
-///////////////////////////// */
+/* Rolling layout */
+.roll-grid { 
+  display: grid; 
+  grid-template-columns: 1fr; 
+  gap: 16px; 
+  align-items: start; 
+}
+.roll-col { 
+  display: grid; 
+  gap: 10px; 
+}
+@media (min-width: 980px) {
+  .roll-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Make Final Deck span both columns */
+#finalPairWrap { 
+  grid-column: 1 / -1; 
+}
+
+
+
+/* [PATCH C] Roll layout polish (OVERRIDE; keeps later grid settings) */
+.roll-grid{ display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
+@media (min-width:980px){ .roll-grid{ grid-template-columns:1fr 1fr; } }
+
+/* keeps the chosen-first card visible while scrolling the second column */
+#chosenFirst .option{ position:sticky; top:8px; }
+
+/* small hint style (used in Play header right now) */
+.kbd-hint{ font-size:12px; color:var(--muted); margin-top:6px; }
+
+
+
+
+/* ── [C] Components: buttons & variants ──────────────────── */
 .btn {
   padding: 10px 14px;
   border: 1px solid var(--line);
@@ -229,9 +279,9 @@ input[type=range] {
   border-color: #802525;
 }
 
-/* /////////////////////////////
-   Lists & Rows
-///////////////////////////// */
+
+
+/* ── [C] Components: lists, packs, pills ─────────────────── */
 .list { display: grid; gap: 8px; }
 
 .pack {
@@ -251,9 +301,9 @@ input[type=range] {
   flex-wrap: wrap;
 }
 
-/* /////////////////////////////
-   Colors & Meta Chips
-///////////////////////////// */
+
+
+/* ── [C] Components: color chips & meta tags ─────────────── */
 .colors {
   display: flex;
   gap: 8px;
@@ -274,7 +324,6 @@ input[type=range] {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
 }
 
-/* White (W) */
 .colors .c.W {
   color: #f2e9b6;
   background: linear-gradient(180deg, #0f0f0b 0%, #14130d 100%);
@@ -282,7 +331,6 @@ input[type=range] {
   box-shadow: inset 0 0 0 1px rgba(245,235,170,0.08);
 }
 
-/* Blue (U) */
 .colors .c.U {
   color: #a7c9ff;
   background: linear-gradient(180deg, #0b1119 0%, #0f1722 100%);
@@ -290,7 +338,6 @@ input[type=range] {
   box-shadow: inset 0 0 0 1px rgba(100,149,237,0.10);
 }
 
-/* Black (B) */
 .colors .c.B {
   color: #e6e6e6;
   background: linear-gradient(180deg, #0a0a0a 0%, #0f0f0f 100%);
@@ -298,7 +345,6 @@ input[type=range] {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
 }
 
-/* Red (R) */
 .colors .c.R {
   color: #ffb0a6;
   background: linear-gradient(180deg, #170b0b 0%, #1d0e0e 100%);
@@ -306,7 +352,6 @@ input[type=range] {
   box-shadow: inset 0 0 0 1px rgba(255,99,71,0.10);
 }
 
-/* Green (G) */
 .colors .c.G {
   color: #aee5b0;
   background: linear-gradient(180deg, #0b130e 0%, #0f1a13 100%);
@@ -382,8 +427,6 @@ input[type=range] {
   gap:6px;
 }
 
-
-/* Collapsible subfilter blocks */
 details.subfilter {
   border: 1px solid var(--line, #2a2d31);
   border-radius: 10px;
@@ -400,7 +443,6 @@ details.subfilter > summary {
   gap: 8px;
 }
 
-/* custom chevron thing - - Might not keep */
 details.subfilter > summary::after {
   content: '▸';
   transform: rotate(0deg);
@@ -411,7 +453,6 @@ details.subfilter[open] > summary::after {
   transform: rotate(90deg);
 }
 
-/* Make chips compact */
 .set-grid .set-chip {
   display: inline-flex;
   align-items: center;
@@ -438,21 +479,41 @@ details.subfilter[open] > summary::after {
 }
 
 
-/* /////////////////////////////
-  Options / Cards / Logs
-///////////////////////////// */
+
+/* ── [C] Components: options, logs, inline edit ──────────── */
 .options { 
   display: grid; gap: 12px; 
 }
 
 .option {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   border: 1px solid var(--line);
   background: #0f1013;
   border-radius: 10px;
   padding: 12px 14px;
+}
+
+/* Bottom button row inside each option card */
+.option .pill {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Make both buttons fill space equally */
+.option .pill .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* chosen card highlight */
+.option.chosen {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan) inset;
 }
 
 .hint { 
@@ -496,9 +557,117 @@ summary { cursor: pointer; color: var(--muted); }
 
 .inline-edit { display: grid; gap: 8px; margin-top: 8px; }
 
-/* /////////////////////////////
-   Guardrails
-///////////////////////////// */
+
+
+/* ── [C] Components: stats layout (KPI & callouts) ───────── */
+.kpis{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap:12px;
+  margin: 0 0 12px 0;
+}
+
+.kpi{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background: var(--chip);
+  padding:12px;
+}
+
+.kpi .label{
+  font-size:12px; color:var(--muted); letter-spacing:.2px;
+}
+
+.kpi .value{
+  font-weight:700; font-size:20px; line-height:1.1; margin-top:4px;
+}
+
+.callout{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#111215;
+  padding:12px;
+  margin: 0 0 12px 0;
+}
+
+.callout.warn{
+  box-shadow: inset 0 0 0 1px rgba(255,208,40,.18);
+  border-color: var(--yellow);
+}
+
+.callout .callout-title{
+  font-weight:600; margin-bottom:8px; color: var(--fg);
+}
+
+.minilist{ list-style:none; padding:0; margin:0; }
+.minilist li{
+  display:flex; gap:8px; align-items:baseline; justify-content:space-between;
+  padding:6px 0; border-top:1px dashed var(--line);
+}
+
+.minilist li:first-child{ border-top:0; }
+.minilist .pct{ min-width:3ch; text-align:right; }
+.minilist .small{ color:var(--muted); font-size:12px; }
+
+
+
+/* ── [C] Components: stats grid & mini tables ────────────── */
+.stats-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap:12px;
+  margin-top:12px;
+}
+
+.mini-table{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background: var(--chip);
+  padding:12px;
+}
+
+.mini-table h4{ margin:0 0 8px 0; font-size:14px; }
+.mini-table ul{ list-style:none; padding:0; margin:0; }
+.mini-table li{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding:6px 0; border-top:1px dashed var(--line);
+}
+
+.mini-table li:first-child{ border-top:0; }
+.mini-table .lhs .tiny{ color:var(--muted); font-size:12px; }
+.mini-table .rhs{ color:var(--muted); }
+
+
+
+/* ── [C] Components: busy overlay ─────────────────────────── */
+.busy.hidden{ display:none !important; }
+.busy{
+  position:fixed; inset:0; z-index:3000;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: saturate(0.8) blur(1px);
+}
+.busy .busy-inner{
+  background:#0f1013; border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px;
+  display:flex; align-items:center; gap:10px;
+}
+.spinner{
+  width:16px; height:16px;
+  border:2px solid var(--line);
+  border-top-color: var(--cyan);
+  border-radius:50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.busy .msg{ font-size:14px; color:var(--fg); }
+@media (prefers-reduced-motion: reduce){
+.spinner{ animation: none; }
+}
+
+
+
+/* ── [C] Components: guardrails (limits UI) ──────────────── */
 .guard {
   display: grid;
   gap: 6px;
@@ -516,12 +685,27 @@ summary { cursor: pointer; color: var(--muted); }
 
 .guard .bar > div { height: 100%; }
 
-/* /////////////////////////////
-   Helpers
-///////////////////////////// */
+
+
+/* ── [C] Components: collapsible subfilters (Play) ───────── */
+details.subfilter > summary{
+  cursor:pointer;
+  font-weight:600;
+  list-style:none;
+}
+details.subfilter > summary::marker{ content:''; } /* remove default arrow */
+details.subfilter > summary::after{
+  content:'▸';
+  margin-left:6px; opacity:.8;
+  transition: transform 120ms ease;
+}
+details.subfilter[open] > summary::after{ transform: rotate(90deg); }
+
+
+
+/* ── [U] Utilities/helpers ───────────────────────────────── */
 .hidden { display: none !important; }
 
-/* Storage meter */
 .meter {
   height: 10px;
   border: 1px solid var(--line);
@@ -535,11 +719,7 @@ summary { cursor: pointer; color: var(--muted); }
   background: linear-gradient(90deg, #2a7, #7bf);
 }
 
-/* /////////////////////////////
-   Footer
-///////////////////////////// */
 .ftr {
-  /*position: fixed;   <--- Dont really need this fixed*/
   left: 0; right: 0; bottom: 0;
   z-index: 40;
   background: rgba(11,11,12,.85);
@@ -579,16 +759,14 @@ summary { cursor: pointer; color: var(--muted); }
 
 
 
-/* /////////////////////////////
-   Mana selector WIP
-///////////////////////////// */
+/* ── [C] Components: mana selector & color chips ─────────── */
 .mana-grid{ 
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
 }
 
 .mana-grid{
   display:grid;
-  grid-template-columns:repeat(6, minmax(0,1fr)); /* W U B R G C */
+  grid-template-columns:repeat(6, minmax(0,1fr));
   gap:8px;
 }
 
@@ -598,7 +776,7 @@ summary { cursor: pointer; color: var(--muted); }
   border-radius:10px;
   cursor:pointer; user-select:none;
   border:1px solid var(--line);
-  background:#0e1116;              /* moody base */
+  background:#0e1116;
   transition:transform .12s ease, filter .12s ease, outline-color .12s ease;
 }
 
@@ -618,6 +796,7 @@ summary { cursor: pointer; color: var(--muted); }
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
 }
 
+/* [OVERRIDE] #colorFilterBox — compact grid layout for color chips; supersedes earlier flex rule */
 #colorFilterBox{
   display:flex; gap:8px; flex-wrap:wrap;
 }
@@ -627,7 +806,6 @@ summary { cursor: pointer; color: var(--muted); }
   position:relative; display:inline-flex;
 }
 
-/* Hides the checkbox but keep it accessible just in case */
 #colorFilterBox .pill input{
   position:absolute; inset:0; opacity:0; width:100%; height:100%;
   cursor:pointer;
@@ -644,7 +822,6 @@ summary { cursor: pointer; color: var(--muted); }
   transition:transform .12s ease, filter .12s ease, outline-color .12s ease;
 }
 
-/* very dark per-color tint */
 #colorFilterBox .pill .chip.W{ border-color:#6b6340; }
 #colorFilterBox .pill .chip.U{ border-color:#294e80; }
 #colorFilterBox .pill .chip.B{ border-color:#3a3a3a; }
@@ -652,7 +829,6 @@ summary { cursor: pointer; color: var(--muted); }
 #colorFilterBox .pill .chip.G{ border-color:#2f6b3a; }
 #colorFilterBox .pill .chip.C{ border-color:#3a4149; }
 
-/* light up in that mana color */
 #colorFilterBox .pill input:checked + .chip{ outline:2px solid var(--cyan); outline-offset:2px; transform:translateY(-1px); filter:brightness(1.05); }
 #colorFilterBox .pill input:checked + .chip.W{ background:#efe4a8; border-color:#b7a85b; color:#20252b; }
 #colorFilterBox .pill input:checked + .chip.U{ background:#9cc7ff; border-color:#4c79b2; color:#0f1a28; }
@@ -661,7 +837,6 @@ summary { cursor: pointer; color: var(--muted); }
 #colorFilterBox .pill input:checked + .chip.G{ background:#aee6b2; border-color:#4c8a56; color:#0f1a12; }
 #colorFilterBox .pill input:checked + .chip.C{ background:#b9c2cc; border-color:#6b7580; color:#0f141a; }
 
-/* spacing for the selector row */
 .mana-grid{
   margin: 10px 0 14px;
   display:grid;
@@ -676,7 +851,6 @@ summary { cursor: pointer; color: var(--muted); }
   outline: none !important;
 }
 
-/* mana base per color */
 .mana-btn.W{ background:#0e0e0a; border-color:#504a2e; color:#ddd3a1; }
 .mana-btn.U{ background:#0a0f17; border-color:#213d63; color:#9bbcf0; }
 .mana-btn.B{ background:#0a0a0a; border-color:#2e2e2e; color:#cfcfcf; }
@@ -690,6 +864,7 @@ summary { cursor: pointer; color: var(--muted); }
   border-width: 1px;
 }
 
+/* [OVERRIDE] Mana selected styles — later definitions tweak border colors. relies on cascade order */
 .mana-btn.selected.W{
   background: linear-gradient(180deg,#0f0f0b 0%, #14130d 100%);
   border-color:#6b6340;
@@ -727,7 +902,6 @@ summary { cursor: pointer; color: var(--muted); }
   color:#cfd6de;
 }
 
-/* spacing for the selector row */
 .mana-grid{
   margin: 10px 0 14px;
   display:grid;
@@ -735,7 +909,6 @@ summary { cursor: pointer; color: var(--muted); }
   gap:8px;
 }
 
-/* remove outlines everywhere for mana buttons */
 .mana-btn,
 .mana-btn:focus,
 .mana-btn:focus-visible,
@@ -798,7 +971,6 @@ summary { cursor: pointer; color: var(--muted); }
   margin-top: 8px;
 }
 
-/* --- Play Filters and Set/Box --- */
 .set-grid{
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -827,11 +999,9 @@ summary { cursor: pointer; color: var(--muted); }
   padding:10px 0;
 }
 
-/* --- 
 
-Scryfall add in
 
---- */
+/* ── [C] Components: autosuggest (Scryfall) ──────────────── */
 .ac-wrap { position: relative; }
 .ac-list {
   position: absolute; left:0; right:0; top:100%;
@@ -843,12 +1013,9 @@ Scryfall add in
 .ac-item:hover, .ac-item.active { background:#15171b; }
 .ac-empty { padding:8px 10px; color: var(--muted); }
 
-/* --- 
 
-popup
 
---- */
-
+/* ── [C] Components: modal / popup ───────────────────────── */
 .modal.hidden{ display:none !important; }
 .modal{
   position:fixed; inset:0; z-index:2000;
@@ -865,14 +1032,15 @@ popup
   box-shadow: 0 20px 60px rgba(0,0,0,.5);
 }
 
-/* autosuggest loading thing */
 .ac-list .ac-loading{
   padding:6px 8px;
   font-size:12px;
   opacity:.75;
 }
 
-/* COLLECTION: Set/Box chips compact */
+
+
+/* ── [C] Components: collection filter chips ─────────────── */
 #colSetFilterBox.set-grid {
   display: flex !important;      
   flex-wrap: nowrap;          
@@ -883,7 +1051,6 @@ popup
   scrollbar-width: thin;      
 }
 
-/* Smaller pill buttons */
 #colSetFilterBox .set-chip {
   padding: 4px 8px;
   border-radius: 999px;
@@ -891,7 +1058,6 @@ popup
   line-height: 1;
 }
 
-/* Tighter count and keep names from stretching to much */
 #colSetFilterBox .set-chip .name {
   max-width: 16ch;
   overflow: hidden;
@@ -913,7 +1079,8 @@ popup
 }
 
 
-/* Make Theme and Tag chips compact*/
+
+/* ── [C] Components: theme/tag filters ───────────────────── */
 #themeFilterBox.set-grid,
 #tagFilterBox.set-grid {
   gap: 8px;
@@ -927,7 +1094,6 @@ popup
   line-height: 1.2;
 }
 
-/* keep counts not stand out so much */
 #themeFilterBox .set-chip .count,
 #tagFilterBox .set-chip .count {
   opacity: 0.7;
@@ -936,7 +1102,6 @@ popup
   font-size: 0.8em;
 }
 
-/* keep inline controls tight and aligned */
 .group-inline {
   display: inline-flex;
   flex-wrap: wrap;
@@ -944,7 +1109,9 @@ popup
   align-items: center;
 }
 
-/* Compact chip-like select */
+
+
+/* ── [C] Components: compact selects & chip-group ────────── */
 .compact-select {
   appearance: none;
   -webkit-appearance: none;
@@ -972,14 +1139,12 @@ popup
 }
 .compact-select::-ms-expand { display: none; } /* old IE */
 
-/* Chip toggle group for Types */
 .chip-group {
   display: inline-flex;
   gap: 6px;
   align-items: center;
 }
 
-/* Hide the native checkbox but keep it useable */
 .chipcheck {
   position: absolute;
   opacity: 0;
@@ -988,7 +1153,6 @@ popup
   pointer-events: none;
 }
 
-/* The mighty chip itself */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1004,7 +1168,6 @@ popup
   transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
-/* Hover/active/selected states */
 .chip:hover {
   border-color: #3a3f45;
 }
@@ -1012,28 +1175,27 @@ popup
   transform: translateY(0.5px);
 }
 
-/* When the hidden checkbox is checked, style the chip as selected */
 .chipcheck:checked + .chip {
   background: var(--chip-on, #103b27);
   border-color: #2b6b4b;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
 }
 
-/* Focus ring for keyboard nav */
 .chipcheck:focus-visible + .chip,
 .chip:focus-visible {
   outline: 2px solid #51a7ff;
   outline-offset: 2px;
 }
 
-/* match disabled styling if ever disabled */
 .chip[aria-disabled="true"],
 .chip.is-disabled {
   opacity: 0.5;
   pointer-events: none;
 }
 
-/* put Mode and Types on a new line under the color and lets it span full width */
+
+
+/* ── [C] Components: inline controls below color row ─────── */
 .below-colors {
   flex: 1 1 100%;
   display: flex;
@@ -1043,14 +1205,12 @@ popup
   margin-top: 4px;
 }
 
-
 .group-inline {
   display: inline-flex;
   gap: 8px;
   align-items: center;
   padding: 4px 8px;
 }
-
 
 details.subfilter.search-help > summary::after {
   content: '▸';
@@ -1059,6 +1219,21 @@ details.subfilter.search-help > summary::after {
   opacity: 0.8;
   margin-left: 6px;
 }
+
 details.subfilter.search-help[open] > summary::after {
   transform: rotate(90deg);
 }
+
+
+#modalBody .callout.warn {
+  border-color: black;
+}
+
+.backit a {
+  color: var(--pink);
+  text-decoration: none;
+}
+
+
+
+/* ── THE END IS HERE ─────── */

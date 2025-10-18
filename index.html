@@ -1,5 +1,28 @@
 <!doctype html>
+<!-- 
+    /$$$$$                                         /$$$$$$$              /$$    
+   |__  $$                                        | $$__  $$            | $$    
+      | $$ /$$   /$$ /$$$$$$/$$$$   /$$$$$$       | $$  \ $$  /$$$$$$  /$$$$$$  
+      | $$| $$  | $$| $$_  $$_  $$ /$$__  $$      | $$$$$$$  /$$__  $$|_  $$_/  
+ /$$  | $$| $$  | $$| $$ \ $$ \ $$| $$  \ $$      | $$__  $$| $$  \ $$  | $$    
+| $$  | $$| $$  | $$| $$ | $$ | $$| $$  | $$      | $$  \ $$| $$  | $$  | $$ /$$
+|  $$$$$$/|  $$$$$$/| $$ | $$ | $$| $$$$$$$/      | $$$$$$$/|  $$$$$$/  |  $$$$/
+ \______/  \______/ |__/ |__/ |__/| $$____/       |_______/  \______/    \___/  
+                                  | $$                                          
+                                  | $$                                          
+                                  |__/                                          -->
+<!--
+FILE: index.html -- Hydra Jump Bot
+SECTIONS:
+  [A] Head & assets
+  [B] Header bar & badges
+  [C] View: Collection
+  [D] View: Play
+  [E] View: Stats
+  [F] Shared modals & templates
+-->
 <html lang="en">
+<!-- [A] Head & assets -- START -->
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,21 +30,12 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="favicon.png">
 </head>
+<!-- [A] Head & assets -- END -->
 <body>
 
-<!-- 
- $$$$$$\            $$\            $$\     $$\   $$\                 $$\                    
-$$  __$$\           \__|           $$ |    $$ |  $$ |                $$ |                   
-$$ /  $$ |$$\   $$\ $$\  $$$$$$\ $$$$$$\   $$ |  $$ |$$\   $$\  $$$$$$$ | $$$$$$\  $$$$$$\  
-$$ |  $$ |$$ |  $$ |$$ |$$  __$$\\_$$  _|  $$$$$$$$ |$$ |  $$ |$$  __$$ |$$  __$$\ \____$$\ 
-$$ |  $$ |$$ |  $$ |$$ |$$$$$$$$ | $$ |    $$  __$$ |$$ |  $$ |$$ /  $$ |$$ |  \__|$$$$$$$ |
-$$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |     $$  __$$ |
-\$$$$$$ / \$$$$$$  |$$ |\$$$$$$$\  \$$$$  |$$ |  $$ |\$$$$$$$ |\$$$$$$$ |$$ |     \$$$$$$$ |
- \___$$$\  \______/ \__| \_______|  \____/ \__|  \__| \____$$ | \_______|\__|      \_______|
-     \___|                                           $$\   $$ |                             
-                                                     \$$$$$$  |                             
-                                                      \______/                              
--->
+
+  
+<!-- [B] Header bar & badges -- START -->
 <header class="hdr">
   <h1>Hydra Jump Bot</h1>
   <span class="badge" id="appVersion" title="Hydra Jump Bot version">v…</span>
@@ -29,107 +43,107 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
   <span class="badge warn" id="storageStatus">Storage…</span>
   <span class="badge ok" id="jsStatus">Script: OK</span>
   <div class="switcher">
+    <!-- <span class="badge ok">Thing</span> -->
     <button id="btnViewCollection" class="active">Collection</button>
     <button id="btnViewPlay">Play</button>
     <button id="btnViewStats">Stats</button>
   </div>
 </header>
+<!-- [B] Header bar & badges -- END -->
 
-<main class="wrap">
 
-  <!-- 
- 
-  Collection Page
- 
-  -->
-  <section class="card" id="collectionCard">
-    <h2>Collection</h2>
-    <div class="content">
-      <!-- Storeage Heath Zone -->
+
+<main class="wrap"> <!-- Main Body Wrap, keep things in here -- START -->
+
+
+
+<!-- [C] View: Collection -- START -->
+<section class="card" id="collectionCard">
+  <h2>Collection</h2>
+  <div class="content">
+
+    <!-- Storage Health Zone -- START -->
+    <details>
+      <summary>Storage Health</summary>
+      <div class="row">
+        <div style="flex:2">
+          <div class="meter"><div id="storeBar" style="width:0%"></div></div>
+          <div class="tiny" id="storeLine">…</div>
+          <div class="tiny" id="storeHint"></div>
+        </div>
+        <div style="flex:1; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start">
+          <button class="btn btn-pink" id="backupBtn">Backup Now</button>
+          <button class="btn btn-danger" id="wipeBtn" title="Delete all packs &amp; stats">Wipe Collection</button>
+        </div>
+      </div>
+    </details>
+    <!-- Storage Health Zone -- END -->
+
+    <!-- Pack Manager -- START -->
+    <details open>
+      <summary>Add / Manage Packs</summary>
+      <div class="row">
+        <div><label>Pack Name</label><input id="packName" type="text" placeholder="e.g., Vampires — Life Leech"></div>
+        <div><label>Theme (optional)</label><input id="packTheme" type="text" placeholder="e.g., Lifedrain"></div>
+        <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Core Box"></div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Tags (optional)</label>
+          <input id="packTags" type="text" placeholder="e.g., tribal, budget, slivers">
+          <div class="tiny" style="margin-top:4px; opacity:.8">Separate by commas, semicolons, or “#”</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="tiny mana-label" id="manaHint">Select 1–3 colors.</div>
+          <div id="manaGrid"
+          class="mana-grid"
+          role="group"
+          aria-labelledby="manaHint"
+          aria-label="Choose 1 to 3 colors">
+          <button type="button" class="mana-btn c W" data-color="W" aria-pressed="false">W</button>
+          <button type="button" class="mana-btn c U" data-color="U" aria-pressed="false">U</button>
+          <button type="button" class="mana-btn c B" data-color="B" aria-pressed="false">B</button>
+          <button type="button" class="mana-btn c R" data-color="R" aria-pressed="false">R</button>
+          <button type="button" class="mana-btn c G" data-color="G" aria-pressed="false">G</button>
+          <button type="button" class="mana-btn c C" data-color="C" aria-pressed="false">C</button>
+        </div>
+        <!-- Hidden inputs Shhh -->
+         <input type="hidden" id="color1" value="">
+         <input type="hidden" id="color2" value="">
+         <input type="hidden" id="color3" value="">
+        </div>
+      </div>
+      <!-- Pack Deck List -- START  -->
       <details>
-        <summary>Storage Health</summary>
-        <div class="row">
-          <div style="flex:2">
-            <div class="meter"><div id="storeBar" style="width:0%"></div></div>
-            <div class="tiny" id="storeLine">…</div>
-            <div class="tiny" id="storeHint"></div>
+        <summary>Pack Deck List (optional)</summary>
+        <div class="row" style="align-items:flex-end">
+          <div class="ac-wrap">
+            <label>Name</label>
+            <input id="n_name" type="text" placeholder="Card Name">
+            <div id="n_suggest" class="ac-list" style="display:none"></div>
           </div>
-          <div style="flex:1; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start">
-            <button class="btn btn-pink" id="backupBtn">Backup Now</button>
-            <button class="btn btn-danger" id="wipeBtn" title="Delete all packs &amp; stats">Wipe Collection</button>
+          <div><label>Qty</label><input id="n_qty" type="number" min="1" step="1" value="1"></div>
+          <div><label>Mana Cost</label><input id="n_mana" type="text" placeholder="{1}{G} (auto if blank)"></div>
+          <div><label>Type Line</label><input id="n_type" type="text" placeholder="Creature — Hydra (auto if blank)"></div>
+          <div style="flex:0 0 auto">
+            <button class="btn btn-gray" id="n_add" type="button">Add Card</button>
           </div>
         </div>
+        <div class="row">
+          <div style="flex:0 0 auto">
+            <button class="btn btn-cyan" id="n_bulk_open" type="button">Bulk Paste…</button>
+          </div>
+        </div>
+        <div id="n_list" class="tiny" style="margin-top:6px"></div>
       </details>
-      <!-- Pack Manager -->
-      <details open>
-        <summary>Add / Manage Packs</summary>
-        <div class="row">
-          <div><label>Pack Name</label><input id="packName" type="text" placeholder="e.g., Vampires — Life Leech"></div>
-          <div><label>Theme (optional)</label><input id="packTheme" type="text" placeholder="e.g., Lifedrain"></div>
-          <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Core Box"></div>
-        </div>
-
-<div class="row">
-  <div>
-    <!-- Active label (doubles as the dynamic hint) -->
-    <div class="tiny mana-label" id="manaHint">Select 1–3 colors.</div>
-
-    <!-- Mana grid (fills the row) -->
-    <div id="manaGrid"
-         class="mana-grid"
-         role="group"
-         aria-labelledby="manaHint"
-         aria-label="Choose 1 to 3 colors">
-      <button type="button" class="mana-btn c W" data-color="W" aria-pressed="false">W</button>
-      <button type="button" class="mana-btn c U" data-color="U" aria-pressed="false">U</button>
-      <button type="button" class="mana-btn c B" data-color="B" aria-pressed="false">B</button>
-      <button type="button" class="mana-btn c R" data-color="R" aria-pressed="false">R</button>
-      <button type="button" class="mana-btn c G" data-color="G" aria-pressed="false">G</button>
-      <button type="button" class="mana-btn c C" data-color="C" aria-pressed="false">C</button>
-    </div>
-
-    <!-- Hidden inputs (keep your existing add-pack JS working) -->
-    <input type="hidden" id="color1" value="">
-    <input type="hidden" id="color2" value="">
-    <input type="hidden" id="color3" value="">
-  </div>
-</div>
-
-
-<!-- New Pack Deck (optional) -->
-<details>
-  <summary>Pack Deck List (optional)</summary>
-
-<!-- inside “Pack Deck List (optional)” -->
-<div class="row" style="align-items:flex-end">
-  <div class="ac-wrap">
-    <label>Name</label>
-    <input id="n_name" type="text" placeholder="Card Name">
-    <div id="n_suggest" class="ac-list" style="display:none"></div>
-  </div>
-  <div><label>Qty</label><input id="n_qty" type="number" min="1" step="1" value="1"></div>
-  <div><label>Mana Cost</label><input id="n_mana" type="text" placeholder="{1}{G} (auto if blank)"></div>
-  <div><label>Type Line</label><input id="n_type" type="text" placeholder="Creature — Hydra (auto if blank)"></div>
-  <div style="flex:0 0 auto">
-    <button class="btn btn-gray" id="n_add" type="button">Add Card</button>
-  </div>
-</div>
-
-  <div class="row">
-    <div style="flex:0 0 auto">
-      <button class="btn btn-cyan" id="n_bulk_open" type="button">Bulk Paste…</button>
-    </div>
-  </div>
-
-  <div id="n_list" class="tiny" style="margin-top:6px"></div>
-</details>
-
-
-        <div class="row">
-          <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
-          <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
-        </div>
-
+      <!-- Pack Manager Buttons -- START  -->
+      <div class="row">
+        <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
+        <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
+      </div>
+      <!-- Collection Inport and Export -- START  -->
         <div class="sep"></div>
         <div class="row">
           <button class="btn btn-gray" id="exportBtn">Export JSON</button>
@@ -141,204 +155,239 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
           <button class="btn btn-yellow" id="seedBtn">Load Demo Packs</button>
         </div>
       </details>
-      <!-- Collection and Filter Zone -->
-      <details open>
-        <summary>Pack Collection</summary>
-          <!-- Pack Sorting Tools -->
-          <div class="row" style="align-items:center">
-            <div>
-              <label>Sort by</label>
-              <div class="row">
-                <select id="sortBy">
-                  <option value="name">Name</option>
-                  <option value="set">Set / Box</option>
-                  <option value="theme">Theme</option>
-                  <option value="ctype">Color Type</option>
-                  <option value="offered">Offered Count</option>
-                </select>
-                <button id="sortDir" class="btn btn-gray">Asc</button>
-              </div>
-            </div>
-            <div>
-              <label>Page size</label>
-              <input id="pageSize" type="number" min="5" max="200" value="20" step="5">
-            </div>
-            <div class="pager">
-              <button class="btn btn-gray" id="prevPage">Prev</button>
-              <div class="badge" id="pageInfo">Page 1 / 1</div>
-              <button class="btn btn-gray" id="nextPage">Next</button>
-              <label class="tiny">Jump</label><input id="jumpPage" type="number" min="1" value="1" style="width:80px">
-            </div>
-          </div>
-          <!-- Collection filters -->
-          <div class="row">
-            <div>
-              <label>Set / Box</label>
-              <div id="colSetFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-            </div>
-            <div>
-              <label>Colors</label>
-              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-start">
-                <div id="colColorFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-                <div class="pill tiny group-inline below-colors">
-                  <label class="tiny" for="colorMode">Mode</label>
-                    <select id="colorMode" class="compact-select">
-                    <option value="any">Any</option>
-                    <option value="all">All</option>
-                    <option value="exact">Exact</option>
-                  </select>
-                  <div class="chip-group tiny" role="group" aria-label="Types">
-                    <input type="checkbox" id="ctypeMono" class="chipcheck" />
-                    <label for="ctypeMono" class="chip">Mono</label>
-                    <input type="checkbox" id="ctypeBi" class="chipcheck" />
-                    <label for="ctypeBi" class="chip">Two</label>
-                    <input type="checkbox" id="ctypeTri" class="chipcheck" />
-                    <label for="ctypeTri" class="chip">Tri</label>
-                  </div>
-               </div>
-              </div>
-            </div>
-          </div>
-          <details id="collectionFiltersBlock">
-            <summary>Filters</summary>
-            <div class="row">
-              <div style="flex:1">
-                <details class="subfilter" id="themeFilter">
-                  <summary>Theme</summary>
-                  <div id="themeFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-                </details>
-              </div>
-            </div>
-          <div class="row">
-            <div style="flex:1">
-              <details class="subfilter" id="tagFilter">
-                <summary>Tags</summary>
-                <div id="tagFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-              </details>
-            </div>
-          </div>
-          <div id="advFilters" class="pill" style="gap:8px; flex-wrap:wrap; margin-bottom:8px">
-            <input id="searchPacks" type="search"
-              placeholder='Search name/theme/set… try: goblin, "life gain", tag:tribal, -set:demo' 
-              style="min-width:220px">
-            <label class="tiny"><input type="checkbox" id="includeDeckSearch"> Include deck contents</label>
-            <label class="tiny"><input type="checkbox" id="hasDeckOnly"> Has deck only</label>
-            <label class="tiny">Offered ≥ <input id="minOffered" type="number" min="0" value="0" style="width:70px"></label>
-            <label class="tiny">Picked ≥ <input id="minPicked"  type="number" min="0" value="0" style="width:70px"></label>
-            <label class="tiny">Pick-rate % <input id="minPickRate" type="number" min="0" max="100" value="0"  style="width:60px"> – <input id="maxPickRate" type="number" min="0" max="100" value="100" style="width:60px"></label>
-          </div>
-          <div class="search-help-wrap">
-            <details class="subfilter search-help">
-              <summary>Search tips</summary>
-                <ul class="tiny" style="margin:6px 0 0 16px">
-                  <li>Words match <em>name, theme, set</em>: <code>goblin</code>, <code>"life gain"</code></li>
-                  <li>Fields: <code>name:</code> <code>theme:</code> <code>set:</code> <code>tag:</code> <code>type:</code></li>
-                  <li>Exclude with <code>-</code>: <code>-set:demo</code>, <code>-tag:budget</code></li>
-                  <li><code>type:</code> searches card types in pack decks (enable “Include deck contents”)</li>
-                  <li>Combine: <code>tag:tribal theme:counters "hydra"</code></li>
-                </ul>
-              </details>
-            </div>
-          </details>
-          <br>
-          <div class="list" id="packList"></div>
-        </details>
-      </div>
-    </section>
-<!-- 
- 
-  PLAY PAGE
-  
--->
-    <section class="card hidden" id="playCard">
-      <h2>Play</h2>
-      <div class="content">
-        <!-- Play Filters -->
-        <details>
-          <summary>Filters</summary>
-          <div class="row">
-            <div>
-              <label>Set / Box</label>
-              <div id="setFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-            </div>
-            <div>
-              <label>Colors (any-match)</label>
-              <div id="colorFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
-            </div>
-          </div>
-          <br>
-          <div class="row">
-            <button class="btn btn-gray" id="clearFiltersBtn">Clear Filters</button>
-          </div>
-          <div class="tiny" id="eligibleCount">Eligible after filter: 0</div>
-        </details>
-        <!-- Probly Guards -->
-      <details>
-        <summary>Probabilistic guardrails</summary>
-        <div class="guard">
-          <div id="guardPool">Pool now: …</div>
-          <div class="bar" id="guardBar"></div>
-          <div id="guardMono">If first is Mono: …</div>
-          <div id="guardBi">If first is Two: …</div>
-          <div id="guardTri">If first is Tri: …</div>
-        </div>
-      </details>
-      <!-- Roll Settings -->
-      <details>
-        <summary>Roll Settings</summary>
-        <div class="row">
-          <div><label>Options per roll (3–6)</label><input id="optionsPerRoll" type="number" min="3" max="6" step="1" value="3"></div>
+      
+      <!-- Collection Filters -->
+      <details id="collectionFilters">
+        <summary>Collection Filters</summary>
+         <div class="row">
           <div>
-            <label>Chance to include a 3-color option</label>
-            <div class="row" style="align-items:center">
-              <input id="triSharePct" type="range" min="0" max="100" step="5" value="10">
-              <div style="flex:0 0 auto"><span id="triSharePctLabel">10%</span></div>
-            </div>
-            <div class="tiny">Set to 0% to disable tri entirely (unless Relax must rescue).</div>
+            <label>Set / Box</label>
+            <div id="colSetFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
           </div>
-        </div>
-        <div class="row">
-          <label class="pill"><input type="checkbox" id="capOneTri" checked> Cap at most one 3-color option</label>
-          <label class="pill"><input type="checkbox" id="fairMode" checked> Fair RNG (bias under-offered)</label>
-        </div>
-      </details>
-      <!-- First Pick -->
-      <div class="row" style="margin-top:6px">
-        <button class="btn btn-cyan" id="rollFirstBtn">Roll First Options</button>
-        <button class="btn btn-gray" id="resetPlayBtn">Reset Session</button>
-      </div>
-      <div>
-        <label>First Roll (pick one)</label>
-        <div class="options" id="firstOptions"></div>
-      </div>
-      <div id="chosenFirstWrap" style="display:none">
-        <details open>
-          <summary>First Choice</summary>
-          <div id="chosenFirst"></div>
-        </details>
-      </div>
-      <!-- Second Pick -->
-      <details>
-        <summary>Second Roll Settings</summary>
-        <div class="row">
-          <label class="pill"><input type="checkbox" id="excludeUnpicked"> Exclude unpicked from first roll</label>
-          <label class="pill"><input type="checkbox" id="relaxIfStuck" checked> Relax constraint if stuck</label>
-          <div id="overlapWrap" class="row" style="display:none">
-            <div>
-              <label>Overlap Color (for 2-color first picks)</label>
-              <select id="overlapColor"><option value="AUTO">Auto (either color)</option></select>
+          <div>
+            <label>Mana Filter</label>
+            <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-start">
+              <div id="colColorFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+              <div class="pill tiny group-inline below-colors">
+                <label class="tiny" for="colorMode">Mode</label>
+                <select id="colorMode" class="compact-select">
+                  <option value="any">Any</option>
+                  <option value="all">All</option>
+                  <option value="exact">Exact</option>
+                </select>
+                <div class="chip-group tiny" role="group" aria-label="Types">
+                  <input type="checkbox" id="ctypeMono" class="chipcheck" />
+                  <label for="ctypeMono" class="chip">Mono</label>
+                  <input type="checkbox" id="ctypeBi" class="chipcheck" />
+                  <label for="ctypeBi" class="chip">Two</label>
+                  <input type="checkbox" id="ctypeTri" class="chipcheck" />
+                  <label for="ctypeTri" class="chip">Tri</label>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+        <!-- Clear / Diagnose -->
+        <div class="row" style="margin-top:8px">
+          <button class="btn btn-gray" id="clearCollectionFiltersBtn">Clear Filters</button>
+          <button class="btn btn-gray btn-small" id="diagnoseSetMismatchBtn">Diagnose Collection</button>
+        </div>
+        <br>
+        <!-- Advanced filter block-->
+       <details id="collectionFiltersBlock">
+        <summary>More Filters</summary>
+        <div class="row">
+          <div style="flex:1">
+            <details class="subfilter" id="themeFilter">
+              <summary>Theme</summary>
+              <div id="themeFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+            </details>
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <details class="subfilter" id="tagFilter">
+              <summary>Tags</summary>
+              <div id="tagFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+            </details>
+          </div>
+        </div>
+        <div id="advFilters" class="pill" style="gap:8px; flex-wrap:wrap; margin-bottom:8px">
+          <input id="searchPacks" type="search"
+          placeholder='Search name/theme/set… try: goblin, "life gain", tag:tribal, -set:demo' 
+          style="min-width:220px">
+          <label class="tiny"><input type="checkbox" id="includeDeckSearch"> Include deck contents</label>
+          <label class="tiny"><input type="checkbox" id="hasDeckOnly"> Has deck only</label>
+          <label class="tiny">Offered ≥ <input id="minOffered" type="number" min="0" value="0" style="width:70px"></label>
+          <label class="tiny">Picked ≥ <input id="minPicked"  type="number" min="0" value="0" style="width:70px"></label>
+          <label class="tiny">Pick-rate % <input id="minPickRate" type="number" min="0" max="100" value="0"  style="width:60px"> – <input id="maxPickRate" type="number" min="0" max="100" value="100" style="width:60px"></label>
+        </div>
+        <div class="search-help-wrap">
+          <details class="subfilter search-help">
+            <summary>Search tips</summary>
+            <ul class="tiny" style="margin:6px 0 0 16px">
+              <li>Words match <em>name, theme, set</em>: <code>goblin</code>, <code>"life gain"</code></li>
+              <li>Fields: <code>name:</code> <code>theme:</code> <code>set:</code> <code>tag:</code> <code>type:</code></li>
+              <li>Exclude with <code>-</code>: <code>-set:demo</code>, <code>-tag:budget</code></li>
+              <li><code>type:</code> searches card types in pack decks (enable “Include deck contents”)</li>
+              <li>Combine: <code>tag:tribal theme:counters "hydra"</code></li>
+            </ul>
+          </details>
+        </div>
       </details>
-      <div class="row" style="margin-top:6px">
-        <button class="btn btn-cyan" id="rollSecondBtn">Roll Second Options</button>
-        <button class="btn btn-yellow" id="rerollSecondBtn">Re-roll Second Options</button>
+      </details>
+    
+    <!-- Collection List -->
+    <details open id="collectionList">
+      <summary>Collection List</summary>
+      <!-- Pack Sorting Tools -->
+       <div class="row" style="align-items:center">
+        <div>
+          <label>Sort by</label>
+          <div class="row">
+            <select id="sortBy">
+              <option value="name">Name</option>
+              <option value="color">Mana (WUBRG)</option>
+              <option value="set">Set / Box</option>
+              <option value="theme">Theme</option>
+              <option value="ctype">Color</option>
+              <option value="offered">Offered Count</option>
+            </select>
+            <button id="sortDir" class="btn btn-gray">Asc</button>
+          </div>
+        </div>
+        <div>
+          <label>Page size</label>
+          <input id="pageSize" type="number" min="5" max="200" value="20" step="5">
+        </div>
+        <div class="pager">
+          <button class="btn btn-gray" id="prevPage">Prev</button>
+          <div class="badge" id="pageInfo">Page 1 / 1</div>
+          <button class="btn btn-gray" id="nextPage">Next</button>
+          <label class="tiny">Jump</label><input id="jumpPage" type="number" min="1" value="1" style="width:80px">
+        </div>
       </div>
-      <div class="hint">Bias: mostly two-color games. Tri-color appears per slider (capped to 1), or as a last-resort when “Relax” fills missing slots.</div>
-      <div>
-        <label>Second Roll (pick one)</label>
-        <div class="options" id="secondOptions"></div>
+      <br>
+      <div class="list" id="packList"></div>
+    </details>
+  </div>
+</section>
+    
+
+
+<!-- [D] View: Play -- START -->   
+<section class="card hidden" id="playCard">
+  <h2>Play</h2>
+  <div class="content">
+    <!-- Play Filters -->
+    <details>
+      <summary>Filters</summary>
+      <div class="row">
+        <div>
+          <label>Set / Box</label>
+          <div id="setFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+        </div>
+        <div>
+          <label>Colors</label>
+          <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+            <div id="colorFilterBox" class="row" style="gap:10px;flex-wrap:wrap"></div>
+            <div style="margin-left:auto; min-width:160px">
+              <label class="tiny" for="colorModePlay">Match</label>
+              <select id="colorModePlay" class="compact-select" style="width:100%">
+                <option value="any">Any selected</option>
+                <option value="all">All selected</option>
+                <option value="exact">Exact match</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Themes -->
+      <details class="subfilter" id="playThemeFilter" style="margin-top:8px">
+        <summary>Themes</summary>
+        <div id="playThemeFilterBox" class="row" style="gap:10px;flex-wrap:wrap; margin-top:8px"></div>
+      </details>
+      <!-- Tags -->
+      <details class="subfilter" id="playTagFilter" style="margin-top:8px">
+        <summary>Tags</summary>
+        <div id="playTagFilterBox" class="row" style="gap:10px;flex-wrap:wrap; margin-top:8px"></div>
+      </details>
+      <br>
+      <div class="row">
+        <button class="btn btn-gray" id="clearFiltersBtn">Clear Filters</button>
+      </div>
+      <div class="tiny" id="eligibleCount" aria-live="polite">Eligible after filter: 0</div>
+    </details>
+    <!-- Guardrails -->
+    <details>
+      <summary>Probabilistic guardrails</summary>
+      <div class="guard">
+        <div id="guardPool">Pool now: …</div>
+        <div class="bar" id="guardBar"></div>
+        <div id="guardMono">If first is Mono: …</div>
+        <div id="guardBi">If first is Two: …</div>
+        <div id="guardTri">If first is Tri: …</div>
+      </div>
+    </details>
+    <!-- Roll Settings -->
+    <details>
+      <summary>Roll Settings</summary>
+      <div class="row">
+        <div><label>Options per roll (3–6)</label><input id="optionsPerRoll" type="number" min="3" max="6" step="1" value="3"></div>
+        <div>
+          <label>Chance to include a 3-color option</label>
+          <div class="row" style="align-items:center">
+            <input id="triSharePct" type="range" min="0" max="100" step="5" value="10">
+            <div style="flex:0 0 auto"><span id="triSharePctLabel">10%</span></div>
+          </div>
+          <div class="tiny">Set to 0% to disable tri entirely (unless Relax must rescue).</div>
+        </div>
+      </div>
+      <div class="row">
+        <label class="pill"><input type="checkbox" id="capOneTri" checked> Cap at most one 3-color option</label>
+        <label class="pill"><input type="checkbox" id="fairMode" checked> Fair RNG (bias under-offered)</label>
+      </div>
+      <div class="sep"></div>
+      <div class="row">
+        <label class="pill">
+          <input type="checkbox" id="excludeUnpicked"> Exclude unpicked from first roll
+        </label>
+        <label class="pill">
+          <input type="checkbox" id="relaxIfStuck" checked> Relax constraint if stuck
+        </label>
+        <div id="overlapWrap" class="row" style="display:none">
+          <div>
+            <label>Overlap Color (for 2-color first picks)</label>
+            <select id="overlapColor">
+              <option value="AUTO">Auto (either color)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </details>
+    <!-- Pack Drafting -- START -->
+    <div class="roll-grid">
+      <div class="roll-col">
+        <!-- First Pick -->
+        <div class="row" style="margin-top:6px">
+          <button class="btn btn-cyan" id="rollFirstBtn">Roll First Options</button>
+          <button class="btn btn-gray" id="resetPlayBtn">Reset Session</button>
+        </div>
+        <div>
+          <label>First Roll (pick one)</label>
+          <div class="options" id="firstOptions"></div>
+        </div>
+      </div>
+      <div class="roll-col">
+        <!-- Second Pick -->
+        <div class="row" style="margin-top:6px">
+          <button class="btn btn-cyan" id="rollSecondBtn">Roll Second Options</button>
+          <button class="btn btn-yellow" id="rerollSecondBtn">Re-roll Second Options</button>
+        </div>
+        <div>
+          <label>Second Roll (pick one)</label>
+          <div class="options" id="secondOptions"></div>
+        </div>
       </div>
       <div id="finalPairWrap" style="display:none">
         <details open>
@@ -346,75 +395,67 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
           <div id="finalPair"></div>
         </details>
       </div>
-
-      <details >
-        <summary>Draft History (last 10 decks)</summary>
-        <div class="row" style="margin:6px 0">
-          <button class="btn btn-gray" id="clearHistoryBtn">Clear History</button>
-        </div>
-        <div id="historyList" class="list"></div>
-      </details>
-
-      <div class="sep"></div>
-      <div class="stat" id="statusLine">No session yet.</div>
-
-      <div class="sep"></div>
-      <div>
-        <label>Session Log</label>
-        <ul id="log" class="log"></ul>
-      </div>
-
-      <details open>
-        <summary>Quick Play Mode</summary>
-        <div class="row">
-          <div><label>Players (2–6)</label><input id="players" type="number" min="2" max="6" step="1" value="2"></div>
-          <div class="pill"><label class="pill"><input type="checkbox" id="avoidCollisions" checked> Avoid pack reuse across players</label></div>
-        </div>
-        <div class="row">
-          <button class="btn btn-cyan" id="dealBtn">Deal Pairs</button>
-          <button class="btn btn-gray" id="clearDealsBtn">Clear Deals</button>
-        </div>
-        <div class="tiny" id="dealSummary"></div>
-        <div class="options" id="dealtResults"></div>
-      </details>
-
     </div>
-  </section>
-<!-- 
- 
-  STATS PAGE
- 
--->
-  <section class="card hidden" id="statsCard">
-    <h2>Stats & Usage</h2>
-    <div class="content">
-      <div id="statsPanel" class="content"></div>
+    <!-- Drafting History -- START -->
+    <details >
+      <summary>Draft History (last 10 decks)</summary>
+      <div class="row" style="margin:6px 0">
+        <button class="btn btn-gray" id="clearHistoryBtn">Clear History</button>
+      </div>
+      <div id="historyList" class="list"></div>
+    </details>
+    <div class="sep"></div>
+    <!-- Session Log -- START -->
+    <div class="stat" id="statusLine">No session yet.</div>
+    <div class="sep"></div>
+    <div>
+      <label>Session Log</label>
+      <ul id="log" class="log"></ul>
+    </div>
+    <!-- Quick Play -- START -->
+    <details open>
+      <summary>Quick Play</summary>
       <div class="row">
-        <button class="btn btn-gray" id="exportUsageCsvBtn">Export Usage CSV</button>
-        <button class="btn btn-danger" id="resetPicksBtn" title="Set all pick counters back to 0">Reset Pick Counters</button>
-        <button class="btn btn-danger" id="resetOfferedBtn" title="Set all offered counters back to 0">Reset Offered Counters</button>
+        <div><label>Players (2–6)</label><input id="players" type="number" min="2" max="6" step="1" value="2"></div>
+        <div class="pill"><label class="pill"><input type="checkbox" id="avoidCollisions" checked> Avoid pack reuse across players</label></div>
       </div>
-    </div>
-  </section>
-</main>
-
-<footer class="ftr">
-  <small>© 2025 QuietHydra</small>
-  <div class="spacer"></div>
-  <div class="pill" style="gap:10px">
-    <a href="https://bsky.app/profile/quiethydra.com" target="_blank" rel="noopener">Bluesky</a>
-    <a href="https://www.youtube.com/@QuietHydra" target="_blank" rel="noopener">YouTube</a>
-    <a href="https://github.com/QuietHydraBot/HydraJumpBot.git" target="_blank" rel="noopener">GitHub</a>
-    <a href="https://ko-fi.com/quiethydra" target="_blank" rel="noopener">Buy Me A Single</a>
+      <div class="row">
+        <button class="btn btn-cyan" id="dealBtn">Deal Pairs</button>
+        <button class="btn btn-gray" id="clearDealsBtn">Clear Deals</button>
+      </div>
+      <div class="tiny" id="dealSummary"></div>
+      <div class="options" id="dealtResults"></div>
+    </details>
   </div>
-  <span class="tiny">
-  <a href="LICENSE" target="_blank" rel="noopener">Non-Commercial License</a>
-  /
-  <a href="NOTICE.md" target="_blank" rel="noopener">Attribution Notice</a>
-</span>
-</footer>
+</section>
+<!-- [D] View: Play -- END -->
 
-<!-- Mini popup -->
+
+
+<!-- [E] View: Stats -- START -->
+<section class="card hidden" id="statsCard">
+  <h2>Stats & Usage</h2>
+  <div class="content">
+  <!-- Summary blocks -->
+   <div id="statsLowPerf" class="callout warn hidden" aria-live="polite" data-min-offered="5"></div>
+   <div id="statsPanel" class="content"></div>
+   <!-- Stat Buttons -->
+    <div class="row">
+      <button class="btn btn-gray" id="exportUsageCsvBtn">Export Usage CSV</button>
+      <button class="btn btn-danger" id="resetPicksBtn" title="Set all pick counters back to 0">Reset Pick Counters</button>
+      <button class="btn btn-danger" id="resetOfferedBtn" title="Set all offered counters back to 0">Reset Offered Counters</button>
+    </div>
+  </div>
+</section>
+<!-- [E] View: Stats -- END -->
+
+
+
+</main> <!-- Main Body Wrap -- END -->
+
+
+
+<!-- [F] Shared modals & templates -- START -->
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-inner">
     <h3 id="modalTitle" style="margin:0 0 8px 0">Modal</h3>
@@ -425,6 +466,39 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
     </div>
   </div>
 </div>
+<!-- [F] Shared modals & templates -- END -->
+
+
+
+<!-- [Y] Footer -- START -->
+<footer class="ftr">
+  <small>© 2025 QuietHydra</small>
+  <div class="spacer"></div>
+  <div class="pill" style="gap:10px">
+    <a href="https://bsky.app/profile/quiethydra.com" target="_blank" rel="noopener">Bluesky</a>
+    <a href="https://www.youtube.com/@QuietHydra" target="_blank" rel="noopener">YouTube</a>
+    <a href="https://github.com/QuietHydraBot/HydraJumpBot" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://ko-fi.com/quiethydra" target="_blank" rel="noopener">Buy Me A Single</a>
+  </div>
+  <span class="tiny">
+    <a href="LICENSE" target="_blank" rel="noopener">Non-Commercial License</a>
+    /
+    <a href="NOTICE.md" target="_blank" rel="noopener">Attribution Notice</a>
+  </span>
+</footer>
+<!-- [Y] Footer -- END -->
+
+
+
+<!-- For all busy overlays and long tasks like Bulk Paste -->
+<div id="busy" class="busy hidden" role="status" aria-live="polite" aria-busy="true" aria-hidden="true">
+  <div class="busy-inner">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="msg" id="busyMsg">Working…</div>
+  </div>
+</div>
+
+
 
 <!-- Css and JS Loader -->
 <script>
@@ -455,8 +529,7 @@ $$ $$\$$ |$$ |  $$ |$$ |$$   ____| $$ |$$\ $$ |  $$ |$$ |  $$ |$$ |  $$ |$$ |   
   };
 
   document.head.appendChild(s);
-})('0.7'); // bump to deploy
+})('0.7.2'); // bump up to deploy
 </script>
-
 </body>
 </html>

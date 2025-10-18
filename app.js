@@ -1,30 +1,85 @@
-/*********** 
-     ____.          .___      .__  /\         _________            .___             
-    |    | ____   __| _/____  |  |_)/  ______ \_   ___ \  ____   __| _/____ ___  ___
-    |    |/  _ \ / __ |\__  \ |  |  \ /  ___/ /    \  \/ /  _ \ / __ |/ __ \\  \/  /
-/\__|    (  <_> ) /_/ | / __ \|   Y  \\___ \  \     \___(  <_> ) /_/ \  ___/ >    < 
-\________|\____/\____ |(____  /___|  /____  >  \______  /\____/\____ |\___  >__/\_ \
-                     \/     \/     \/     \/          \/            \/    \/      \/                
-Hydra Jump Bot - JS local build by KayJ and friends*/
-
+/* 
+    /$$$$$                                         /$$$$$$$              /$$    
+   |__  $$                                        | $$__  $$            | $$    
+      | $$ /$$   /$$ /$$$$$$/$$$$   /$$$$$$       | $$  \ $$  /$$$$$$  /$$$$$$  
+      | $$| $$  | $$| $$_  $$_  $$ /$$__  $$      | $$$$$$$  /$$__  $$|_  $$_/  
+ /$$  | $$| $$  | $$| $$ \ $$ \ $$| $$  \ $$      | $$__  $$| $$  \ $$  | $$    
+| $$  | $$| $$  | $$| $$ | $$ | $$| $$  | $$      | $$  \ $$| $$  | $$  | $$ /$$
+|  $$$$$$/|  $$$$$$/| $$ | $$ | $$| $$$$$$$/      | $$$$$$$/|  $$$$$$/  |  $$$$/
+ \______/  \______/ |__/ |__/ |__/| $$____/       |_______/  \______/    \___/  
+                                  | $$                                          
+                                  | $$                                          
+                                  |__/                                          */
+/*
+FILE: app.js — Hydra Jump Bot
+SECTIONS:
+  1) Boot & globals
+  2) Storage (load/save/status)
+  3) Scryfall helpers
+  4) UI primitives (DOM $, modal)
+  5) Collection view (filters, list, editor)
+  6) Play/deal logic
+  7) Stats view
+  8) Events & shortcuts
+*/
 (()=>{
+
+
+
+// ───────────────────────────────────────────────────────────
+// 1) Boot & globals — constants, state, utils
+// ───────────────────────────────────────────────────────────
   const LS_KEY='jumpstart_collection_v1';
   const LS_FAIR='jumpstart_fair_stats_v1';
   const LS_HISTORY = 'jumpstart_draft_history_v1';
+  // [UTIL] $(id) — DOM getter
   const $=id=>document.getElementById(id);
+  // [UTIL] on(el,ev,fn) — event binder
   const on=(el,ev,fn)=>el&&el.addEventListener(ev,fn);
+  // [UTIL] NOOP callback used as a sentinel
+  const NOOP = ()=>{};
+  // [UTIL] uid() — short random id
   const uid=()=>Math.random().toString(36).slice(2,10);
+  // [UTIL] esc(s) — HTML escape
   const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  // [UTIL] showBusy(msg) / hideBusy() — global overlay for long tasks
+  function showBusy(msg='Working…'){
+  const el = $('busy'); if(!el) return;
+  const m = $('busyMsg'); if(m) m.textContent = msg;
+  el.classList.remove('hidden');
+  el.setAttribute('aria-hidden','false');
+  el.setAttribute('aria-busy','true');
+  }
+  function hideBusy(){
+  const el = $('busy'); if(!el) return;
+  el.classList.add('hidden');
+  el.setAttribute('aria-hidden','true');
+  el.setAttribute('aria-busy','false');
+  }
+  async function withBusy(msg, fn){
+  let timer = setTimeout(()=>showBusy(msg), 120); // only show if it takes >120ms
+  try { return await fn(); }
+  finally { clearTimeout(timer); hideBusy(); }
+  }
+
+
+  // [UTIL] $, on, uid, esc — DOM & string helpers
 
   const NO_TAGS = '__NO_TAGS__';
 
+  // [UTIL] chips(colors) — render color chip spans
   const chips=(colors)=>`<div class="colors">${colors.map(c=>`<span class="c ${c}">${c}</span>`).join('')}</div>`;
   const typeOf=p=>p.colors.length===1?'Mono':(p.colors.length===2?'Two-Color':(p.colors.length===3?'Tri-Color':''));
   const typeChip=p=>{const t=typeOf(p); if(t==='Mono')return `<span class="ctype mono">Mono</span>`; if(t==='Two-Color')return `<span class="ctype bi">Two-Color</span>`; if(t==='Tri-Color')return `<span class="ctype tri">Tri-Color</span>`; return '';};
 
   const isMono=p=>p.colors.length===1, isBi=p=>p.colors.length===2, isTri=p=>p.colors.length===3;
+ 
+  // [UTIL] pickRandom(arr, n) — sample without replacement
   const pickRandom=(arr,n)=>{const a=arr.slice(),r=[];while(a.length&&r.length<n){r.push(a.splice(Math.floor(Math.random()*a.length),1)[0]);}return r;};
   const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+  
+  // [UTIL] weightedSample(pool, n, weightFn) — weighted picker core
   function weightedSample(pool,n,weightFn){const items=pool.slice(),res=[];while(items.length&&res.length<n){const w=items.map(weightFn);const tot=w.reduce((a,b)=>a+b,0);let r=Math.random()*tot,idx=0;for(;idx<items.length;idx++){r-=w[idx];if(r<=0)break;}res.push(items.splice(Math.min(idx,items.length-1),1)[0]);}return res;}
 
   const state={
@@ -89,15 +144,41 @@ const settingsDefaults = {
   themeFilter:[] 
 };
 
+
+
+// [UTIL] Parse tags: supports hashtags (#), commas, semicolons, and newlines.
+// Spaces are allowed within a tag (e.g., "card draw").
+// Examples:
+//  "#graveyard #token makers"      -> ["graveyard","token makers"]
+//  "graveyard, tokens; ramp\ndraw" -> ["graveyard","tokens","ramp","draw"]
+function parseTags(raw){
+  const norm = (s)=> s.trim().replace(/\s+/g,' ').replace(/^#+/,''); // collapse spaces; strip leading '#'
+  if (!raw) return [];
+  let s = String(raw).trim();
+  if (!s) return [];
+  // Make each '#' start a new token without splitting on spaces
+  s = s.replace(/#/g, '\n#');
+  const out = [];
+  const seen = new Set();
+  for (const part of s.split(/[,\;\r\n]+/)) {
+    const t = norm(part);
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push(t); }
+  }
+  return out;
+}
+
+
+
 // independent settings
 state.settingsCollection = structuredClone(settingsDefaults);
 state.settingsPlay = structuredClone(settingsDefaults);
 
-// helper to pick a settings bag
+// [UTIL] S(view) — pick settings bag (collection/play)
 function S(view){ return view==='play' ? state.settingsPlay : state.settingsCollection; }
 
 state.newPackDeck = [];
-
 
 const vb = document.getElementById('appVersion');
 if (vb) {
@@ -109,6 +190,10 @@ if (vb) {
 
 
 
+
+// ───────────────────────────────────────────────────────────
+// 2) Storage — load/save/status & localStorage health
+// ───────────────────────────────────────────────────────────
 /* Storage */
 function setStorageStatus(level){
   const el=$('storageStatus'); 
@@ -144,7 +229,7 @@ function saveAll(silent){
   if(!silent){ renderEverything(); }
 }
 
-  /* Storage Health Thing */
+// [UTIL] formatBytes(n) - Storage Health Thing
   function formatBytes(n){
   if(!n) return '0 B';
   const u = ['B','KB','MB','GB'];
@@ -173,7 +258,14 @@ async function refreshStorageHealth(){
 
 
 
-
+// ───────────────────────────────────────────────────────────
+// 5) Collection view — filters, sorting, rendering
+// ───────────────────────────────────────────────────────────
+/*
+* parseSearchQuery(q)
+* Mini syntax: quotes, -negation, and fields name:, theme:, set:, tag:, type:
+* Returns {text, notText, fields, notFields}.
+*/
 function parseSearchQuery(q){
   const out = {
     text:[], notText:[],
@@ -214,19 +306,19 @@ function packHasType(p, needle){
   return deck.some(d => String(d.type||'').toLowerCase().includes(n));
 }
 
-
-  /* Filters/Sort/Paging Stuff */
-
+// [UTIL] matchFilters(pack, settings) — true if a pack passes active filters
+/* Filters/Sort/Paging Stuff */
 function matchFilters(p, settings = state.settingsCollection){
   const s = settings;
 
-  // --- set filter ---
+// --- set filter ---
   if(s.setFilter.length){
+    const N = x => (x||'').trim().toLowerCase();
     const key = p.set ? p.set : 'Unlabeled';
-    if(!s.setFilter.includes(key)) return false;
+    if(!s.setFilter.some(k => N(k) === N(key))) return false;
   }
 
-  // --- color filter with mode ---
+// --- color filter with mode ---
   if(s.colorFilter.length){
     const want = s.colorFilter;
     const mode = s.colorMode || 'any';
@@ -241,8 +333,7 @@ function matchFilters(p, settings = state.settingsCollection){
     }
   }
 
-  // --- keyword search ---
-// --- keyword search with mini syntax ---
+// --- keyword search ---
 const q = String(s.search || '').trim();
 if(q){
   const parsed = parseSearchQuery(q);
@@ -281,12 +372,12 @@ if(q){
   if(parsed.notFields.name.length && parsed.notFields.name.some(v => nameLC.includes(v))) return false;
   }
 
-  // --- has deck only ---
+// --- has deck only ---
   if(s.hasDeckOnly){
     if(!Array.isArray(p.deck) || p.deck.length === 0) return false;
   }
 
-  // --- type filter ---
+// --- type filter ---
   if(Array.isArray(s.ctypeFilter) && s.ctypeFilter.length){
     if(!s.ctypeFilter.includes(p.colors.length)) return false;
   }
@@ -309,8 +400,7 @@ if (Array.isArray(s.tagFilter) && s.tagFilter.length) {
   }
 }
 
-
-  // --- numeric usage filters ---
+// --- numeric usage filters ---
   const off = offeredOf(p);
   const pk  = pickedOf(p);
   const pr  = pickRateOf(p);
@@ -322,10 +412,15 @@ if (Array.isArray(s.tagFilter) && s.tagFilter.length) {
   return true;
 }
 
+function computeSetCounts(){const m=new Map(); for(const p of state.collection){const k=(p.set?p.set:'Unlabeled').trim(); m.set(k,(m.get(k)||0)+1);} return m;}
 
-  function computeSetCounts(){const m=new Map(); for(const p of state.collection){const k=p.set?p.set:'Unlabeled'; m.set(k,(m.get(k)||0)+1);} return m;}
 
 
+/*
+* renderSetFilter(seedSettings, containerId)
+* Renders set chips and binds toggles for the given settings bag (collection/play).
+* Side-effects: updates eligible count/guardrails and re-renders collection when needed.
+*/
 function renderSetFilter(seedSettings = activeSettings(), containerId = 'setFilterBox'){
   const counts = computeSetCounts();
   const all = Array.from(counts.keys()).sort((a,b)=>a.localeCompare(b));
@@ -401,6 +496,10 @@ function renderSetFilter(seedSettings = activeSettings(), containerId = 'setFilt
 
 
 
+/*
+* renderColorFilter(seedSettings, containerId)
+* Renders WUBRGC toggles; respects colorMode; scope-aware (collection vs. play).
+*/
 function renderColorFilter(seedSettings = activeSettings(), containerId = 'colorFilterBox'){
   const wrap = $(containerId);
   if(!wrap) return;
@@ -449,18 +548,13 @@ function renderColorFilter(seedSettings = activeSettings(), containerId = 'color
   }
 }
 
-
-
-
-
-  function offeredOf(p){return state.fair[p.id]?.offer||0;}
-  function pickedOf(p){ return state.fair[p.id]?.pick || 0; }
+function offeredOf(p){return state.fair[p.id]?.offer||0;}
+function pickedOf(p){ return state.fair[p.id]?.pick || 0; }
 function pickRateOf(p){
   const off = offeredOf(p);
   const pk  = pickedOf(p);
-  return off ? Math.round((pk / off) * 100) : 0;
+  return off ? Math.min(100, Math.round((pk / off) * 100)) : 0;
 }
-
 
 function usageTag(p, settings){
   const s = settings || activeSettings();
@@ -472,8 +566,6 @@ function offerTag(p, settings = state.settingsCollection){
   const c=offeredOf(p); 
   return `<span class="offer">offered: ${c}</span>`;
 }
-
-
 
 function ensureFairEntry(id){
   if(!state.fair[id]) state.fair[id] = { offer:0, pick:0 };
@@ -487,22 +579,33 @@ function incPick(p){
   saveAll(true);
 }
 
-  function colorTypeRank(p){return p.colors.length;}
-  
-  
-  
-  
-/**
- * 
- *
- * 
- * Sorting helpers
- * 
- 
- * 
- **/
- 
-  
+// [UTIL] colorTypeRank(p) — sort helper by color count
+function colorTypeRank(p){return p.colors.length;}
+// [UTIL] WUBRG ordering for 'color' sort (W,U,B,R,G; colorless last)
+const WUBRG_INDEX = { W:0, U:1, B:2, R:3, G:4 };
+
+function colorKeyWUBRG(p){
+  const cols = Array.isArray(p.colors) ? p.colors : [];
+  if (!cols.length) return [5, 99, []]; // colorless → last group
+  const idxs = cols.map(c => (WUBRG_INDEX[c] ?? 6)).sort((a,b)=>a-b);
+  // Sort by: primary color group (min index), then color count, then full indices tuple
+  return [idxs[0], idxs.length, idxs];
+}
+
+function cmpTuple(a, b){
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++){
+    const ai = a[i] ?? 0, bi = b[i] ?? 0;
+    if (ai < bi) return -1;
+    if (ai > bi) return 1;
+  }
+  return 0;
+}
+
+
+
+// [UTIL] comparePacks(a,b) — stable sort for renders
+// Sorting helpers
 function comparePacks(a,b, settings = state.settingsCollection){
   const dir = settings.sortDir==='asc'?1:-1;
   let r=0;
@@ -515,6 +618,13 @@ function comparePacks(a,b, settings = state.settingsCollection){
       if(r===0) r=a.name.localeCompare(b.name); break;
     case 'offered':r = offeredOf(a)-offeredOf(b);
       if(r===0) r=a.name.localeCompare(b.name); break;
+          case 'color': {
+      const ka = colorKeyWUBRG(a), kb = colorKeyWUBRG(b);
+      r = cmpTuple(ka, kb);
+      if (r === 0) r = a.name.localeCompare(b.name);
+      break;
+    }
+
     default:       r = a.name.localeCompare(b.name);
   }
   return r*dir;
@@ -523,12 +633,12 @@ function comparePacks(a,b, settings = state.settingsCollection){
 function sortedFiltered(settings = state.settingsCollection){
   return state.collection.filter(p=>matchFilters(p, settings)).slice().sort((a,b)=>comparePacks(a,b,settings));
 }  
- 
+
+// [UTIL] eligibleAfterFilter(settings) — count packs passing filters
 function eligibleAfterFilter(settings = state.settingsCollection){
   return state.collection.filter(p=>matchFilters(p, settings)).length;
 } 
   
- 
 function renderPaginationControls(total, settings = state.settingsCollection){
   const ps=settings.pageSize, pages=Math.max(1,Math.ceil(total/ps));
   if(settings.page>pages) settings.page=pages;
@@ -536,14 +646,13 @@ function renderPaginationControls(total, settings = state.settingsCollection){
   $('prevPage').disabled=settings.page<=1; $('nextPage').disabled=settings.page>=pages;
   $('jumpPage').max=pages; $('jumpPage').value=settings.page;
 }
-  
+ 
+// [UTIL] activeSettings() — current settings bag for UI
 function activeSettings(){
   return state.settingsCollection.view === 'play'
     ? state.settingsPlay
     : state.settingsCollection;
 }
-
-
 
 function packRowHtml(p, settings = state.settingsCollection){
   const tags = Array.isArray(p.tags)?p.tags:[];
@@ -564,7 +673,7 @@ function packRowHtml(p, settings = state.settingsCollection){
     <div class="pill">
       <button class="btn btn-gray" data-view="${p.id}">View Deck</button>
       <button class="btn btn-gray" data-edit="${p.id}">Edit</button>
-      <button class="btn btn-danger" data-del="${p.id}">Delete</button>
+      <button class="btn btn-danger" data-del="${p.id}">X</button>
     </div>
   </div>`;
 }
@@ -575,13 +684,49 @@ function packRowHtml(p, settings = state.settingsCollection){
   }
   
 function bindPackRowButtons(){
-  document.querySelectorAll('button[data-del]')
-    .forEach(b=> b.addEventListener('click', ()=>{ state.collection = state.collection.filter(p=>p.id!==b.dataset.del); saveAll(); }));
+// REPLACE the current delete handler inside bindPackRowButtons() with this:
+
+document.querySelectorAll('button[data-del]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const id   = b.dataset.del;
+    const pack = state.collection.find(x => x.id === id);
+
+    openModal({
+      title: 'Delete this pack?',
+      bodyHTML: `
+        <div>
+          <p>You're about to delete <strong>${esc(pack?.name || 'this pack')}</strong> from your collection.</p>
+          <div class="callout warn" role="note" aria-live="polite" style="margin-top:8px">
+            <div class="callout-title">Reminder</div>
+            <div>
+              Consider <strong class="backit"><a href="#" id="modalBackupNow">BACKING UP</a></strong> before making major changes.
+            </div>
+          </div>
+        </div>
+      `,
+      okText: 'Delete Pack',
+      cancelText: 'Cancel',
+      okClass: 'btn btn-danger',
+      cancelClass: 'btn btn-gray',
+      onOpen() {
+        const link = document.getElementById('modalBackupNow');
+        link?.addEventListener('click', (e) => {
+          e.preventDefault();
+          document.getElementById('backupBtn')?.click();
+        });
+      },
+      async onOK() {
+        state.collection = state.collection.filter(p => p.id !== id);
+        saveAll();
+      }
+    });
+  });
+});
 
   document.querySelectorAll('button[data-edit]')
     .forEach(b=> b.addEventListener('click', ()=> startInlineEdit(b.dataset.edit)));
 
-  document.querySelectorAll('button[data-view]')  // NEW
+  document.querySelectorAll('button[data-view]')
     .forEach(b=> b.addEventListener('click', ()=>{
       const p = state.collection.find(x=>x.id===b.dataset.view);
       if(!p) return;
@@ -594,9 +739,28 @@ function bindPackRowButtons(){
     }));
 }
 
-
+// Inject CSS once: highlight deck rows on hover
+function ensureDeckHoverStyle(){
+  if (document.getElementById('deckHoverStyle')) return;
+  const st = document.createElement('style');
+  st.id = 'deckHoverStyle';
+  st.textContent = `
+    [id^="d_list_"] li[data-line]{
+      transition: background-color .12s ease;
+    }
+    @media (prefers-color-scheme: dark){
+      [id^="d_list_"] li[data-line]:hover{ background-color: rgba(255,255,255,0.10); }
+    }
+    @media (prefers-color-scheme: light){
+      [id^="d_list_"] li[data-line]:hover{ background-color: rgba(0,0,0,0.06); }
+    }
+  `;
+  document.head.appendChild(st);
+}
 
 function startInlineEdit(id){
+  window.__currentPackId = id; // remember which pack the editor is for
+  beginPackDraft(id);
   const p = state.collection.find(x=>x.id===id);
   if(!p) return;
   const row = $('row_'+id);
@@ -685,13 +849,14 @@ row.innerHTML = `
   </div>`;
 
 
-  // --- Tags editor (scoped to this edit row) ---
+  // --- Tags editor ---
 (function(){
   let editTags = Array.isArray(p.tags) ? [...p.tags] : [];
   const wrap  = $(`e_tags_wrap_${id}`);
   const input = $(`e_tag_input_${id}`);
   const hid   = $(`e_tags_hidden_${id}`);
 
+  // [UTIL] normalizeTag(s) — trim/collapse spaces, strip leading '#'
   function normalizeTag(s){
     return s.trim().replace(/\s+/g,' ').replace(/^#+/,''); // no leading '#'
   }
@@ -713,14 +878,20 @@ row.innerHTML = `
     });
   }
 
-  $(`e_tag_add_${id}`)?.addEventListener('click', ()=>{
-    const t = normalizeTag(input.value);
-    if(t && !editTags.map(x=>x.toLowerCase()).includes(t.toLowerCase())){
+$(`e_tag_add_${id}`)?.addEventListener('click', ()=>{
+  const parts = parseTags(input.value || '');
+  const haveLC = editTags.map(x => x.toLowerCase());
+  for (const t of parts) {
+    if (!haveLC.includes(t.toLowerCase())) {
       editTags.push(t);
-      renderChips(); syncHidden();
+      haveLC.push(t.toLowerCase());
     }
-    input.value='';
-  });
+  }
+  renderChips(); syncHidden();
+  input.value = '';
+});
+
+
   input?.addEventListener('keydown', e=>{
     if(e.key==='Enter'){ e.preventDefault(); $(`e_tag_add_${id}`)?.click(); }
   });
@@ -731,8 +902,11 @@ row.innerHTML = `
 
   // Save/Cancel listeners
   row.querySelector(`[data-save="${id}"]`).addEventListener('click',()=>saveInlineEdit(id));
-  row.querySelector(`[data-cancel="${id}"]`).addEventListener('click',()=>renderCollection());
-
+  row.querySelector(`[data-cancel="${id}"]`).addEventListener('click',()=>{
+  endPackDraft();
+  renderCollection();
+});
+  if (typeof renderDeckEditor === 'function') renderDeckEditor();
 
 
 
@@ -745,41 +919,45 @@ row.querySelector(`#d_bulk_open_${id}`)?.addEventListener('click', ()=>{
       <textarea id="bulk_ta_${id}" rows="10" style="width:100%"></textarea>
     `,
     onOpen: ()=>{ $(`bulk_ta_${id}`)?.focus(); },
-    onOK: async ()=>{
-      const ta = $(`bulk_ta_${id}`); if(!ta) return;
-      const items = parseDeckText(ta.value);
-      if(!items.length) return;
+onOK: async ()=>{
+  const ta = $(`bulk_ta_${id}`); if(!ta) return;
+  const items = parseDeckText(ta.value);
+  if(!items.length) return;
 
-      const enriched = await enrichWithScryfallMin(items);
+  const enriched = await withBusy('Attuning mana channels…', () => enrichWithScryfallMin(items));
 
-      const pidx = state.collection.findIndex(x=>x.id===id);
-      if(pidx < 0) return;
-      const current = Array.isArray(state.collection[pidx].deck) ? state.collection[pidx].deck : [];
-      const map = new Map(current.map(d=>[d.name.toLowerCase(), { ...d }]));
+  // merge into the EDIT DRAFT (no persistence yet)
+  const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+    ? draftPackFor(id).deck.slice()
+    : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+       ? state.collection.find(x=>x.id===id).deck.slice()
+       : []);
 
-      for(const it of enriched){
-        const k = it.name.toLowerCase();
-        const prev = map.get(k);
-        if(prev){
-          prev.qty += Math.max(1, it.qty|0);
-          if(!prev.mana && it.mana) prev.mana = it.mana;
-          if(!prev.type && it.type) prev.type = it.type;
-        }else{
-          map.set(k, normalizeDeckItem(it));
-        }
-      }
-
-      const merged = Array.from(map.values()).map(normalizeDeckItem).filter(Boolean);
-      state.collection[pidx] = { ...state.collection[pidx], deck: merged };
-      saveAll(true);
-      (typeof renderDeckEditor==='function') && renderDeckEditor();
+  const map = new Map(base.map(d => [String(d.name||'').toLowerCase(), { ...d }]));
+  for (const it of enriched){
+    const k = String(it.name||'').toLowerCase();
+    const prev = map.get(k);
+    if(prev){
+      prev.qty += Math.max(1, it.qty|0);
+      if(!prev.mana && it.mana) prev.mana = it.mana;
+      if(!prev.type && it.type) prev.type = it.type;
+    }else{
+      map.set(k, normalizeDeckItem(it));
     }
+  }
+
+  const merged = Array.from(map.values()).map(normalizeDeckItem).filter(Boolean);
+  setDeckForPackSilent(id, merged);
+
+  if (typeof renderDeckEditor==='function') renderDeckEditor();
+}
+
   });
 });
 
 
 
-// --- Edit-mode mana grid wiring (mirrors the add form) ---
+// [UTIL] DOM-ready shim — edit-mode mana grid IIFE
 (function(){
   const grid = $(`e_grid_${id}`);
   const hint = $(`e_hint_${id}`);
@@ -830,83 +1008,171 @@ row.querySelector(`#d_bulk_open_${id}`)?.addEventListener('click', ()=>{
 
 
 
-// Bulk paste: Parse -> fetch mana/type -> merge into pack -> save (quiet) -> refresh list
-row.querySelector(`#d_bulk_add_${id}`)?.addEventListener('click', async ()=>{
-  const ta = $(`d_bulk_${id}`);
-  if(!ta) return;
-  const items = parseDeckText(ta.value);
-  if(!items.length) return alert('Nothing to import.');
 
-  // resolve mana/type via Scryfall (queued & rate-limited)
-  const enriched = await enrichWithScryfallMin(items);
+// [UTIL] renderDeckEditor() — inline deck row editor inside the pack row
+// --- Deck editor helpers ---
+function renderDeckEditor(){
+const id = window.__currentPackId;
+const pack = draftPackFor(id) || state.collection.find(x=>x.id===id) || {};
+const deck = Array.isArray(pack.deck) ? pack.deck : [];
 
-  // merge into this pack deck by name
-  const pidx = state.collection.findIndex(x=>x.id===id);
-  if(pidx < 0) return;
-  const current = Array.isArray(state.collection[pidx].deck) ? state.collection[pidx].deck : [];
-  const map = new Map(current.map(d=>[d.name.toLowerCase(), { ...d }]));
-  for(const it of enriched){
-    const k = it.name.toLowerCase();
-    const prev = map.get(k);
-    if(prev){
-      prev.qty += Math.max(1, it.qty|0);
-      if(!prev.mana && it.mana) prev.mana = it.mana;
-      if(!prev.type && it.type) prev.type = it.type;
-      map.set(k, prev);
-    }else{
-      map.set(k, normalizeDeckItem(it) || { name:it.name, qty:it.qty, mana:it.mana, type:it.type });
-    }
-  }
-  const merged = Array.from(map.values()).map(normalizeDeckItem).filter(Boolean);
-  state.collection[pidx] = { ...state.collection[pidx], deck: merged };
+  const host = $(`d_list_${id}`);
+  if(!host) return;
 
-  saveAll(true);   // keep editor open
-  ta.value = '';
-  renderDeckEditor(); // refresh the list within the editor
+  ensureDeckHoverStyle();
+  host.innerHTML = deck.length ? `
+    <ul style="list-style:none; margin:0; padding:0; display:grid; gap:6px">
+      ${deck.map((it,idx)=>`
+        <li data-line="${idx}" style="
+          display:flex; align-items:center; justify-content:space-between;
+          border:1px dashed var(--line); padding:6px 8px; border-radius:8px;
+          gap:10px; white-space:nowrap; overflow:hidden; transition:background .12s;
+        ">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <span class="tiny" style="flex:0 0 auto">${it.qty}×</span>
+            <strong class="card-name" data-cardname="${esc(it.name)}" style="flex:0 0 auto">${esc(it.name)}</strong>
+            <span style="flex:0 0 auto">${it.mana ? manaChips(it.mana) : ''}</span>
+            <span class="tag" style="flex:0 0 auto">${esc(it.type||'')}</span>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn xs" data-edit-line="${idx}" type="button" title="Edit this card">✎</button>
+            <button class="btn btn-danger" data-del-line="${idx}" type="button">X</button>
+          </div>
+        </li>`).join('')}
+    </ul>` : `<div class="hint">No cards yet.</div>`;
+
+  // Delete buttons
+host.querySelectorAll('button[data-del-line]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const i = parseInt(b.dataset.delLine,10);
+    const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+      ? draftPackFor(id).deck.slice()
+      : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+         ? state.collection.find(x=>x.id===id).deck.slice()
+         : []);
+    base.splice(i,1);
+    setDeckForPackSilent(id, base);
+    renderDeckEditor();
+  });
+});
+
+  // Inline edit buttons
+  host.querySelectorAll('button[data-edit-line]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.editLine,10);
+const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+  ? draftPackFor(id).deck
+  : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+     ? state.collection.find(x=>x.id===id).deck
+     : []);
+const it = base[i]; if(!it) return;
+
+
+      const li = host.querySelector(`li[data-line="${i}"]`);
+      if (!li) return;
+      li.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label class="tiny">Qty</label>
+          <input id="line_qty_${id}_${i}" type="number" min="1" value="${it.qty||1}" style="width:64px">
+          <label class="tiny">Name</label>
+          <input id="line_name_${id}_${i}" type="text" value="${esc(it.name)}" style="min-width:180px">
+          <label class="tiny">Mana</label>
+          <input id="line_mana_${id}_${i}" type="text" value="${esc(it.mana||'')}" placeholder="{G}{G}{1}" style="width:140px">
+          <label class="tiny">Type</label>
+          <input id="line_type_${id}_${i}" type="text" value="${esc(it.type||'')}" placeholder="Creature — Hydra" style="min-width:200px">
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+          <button class="btn" data-save-line="${i}" type="button">Save</button>
+          <button class="btn" data-cancel-line="${i}" type="button">Cancel</button>
+        </div>`;
+
+      // Save edited row
+li.querySelector('button[data-save-line]')?.addEventListener('click', ()=>{
+  const name = $(`line_name_${id}_${i}`).value.trim();
+  const qty  = Math.max(1, parseInt($(`line_qty_${id}_${i}`).value||1,10));
+  const mana = $(`line_mana_${id}_${i}`).value.trim();
+  const type = $(`line_type_${id}_${i}`).value.trim();
+  if(!name) return alert('Enter a card name.');
+  const item = normalizeDeckItem({ name, qty, mana, type });
+  if(!item) return alert('Invalid row.');
+
+  const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+    ? draftPackFor(id).deck.slice()
+    : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+       ? state.collection.find(x=>x.id===id).deck.slice()
+       : []);
+  base[i] = item;
+  setDeckForPackSilent(id, base);
+  renderDeckEditor();
+});
+
+li.querySelector('button[data-cancel-line]')?.addEventListener('click', ()=>{
+  // Discard inline row edits and redraw from the current draft
+  renderDeckEditor();
 });
 
 
-  // --- Deck editor helpers ---
-  function renderDeckEditor(){
-    const pack = state.collection.find(x=>x.id===id) || {};
-    const deck = Array.isArray(pack.deck) ? pack.deck : [];
-    const host = $(`d_list_${id}`);
-    if(!host) return;
-host.innerHTML = deck.length ? `
-  <ul style="list-style:none; margin:0; padding:0; display:grid; gap:6px">
-    ${deck.map((it,idx)=>`
-      <li style="
-        display:flex; align-items:center; justify-content:space-between;
-        border:1px dashed var(--line); padding:6px 8px; border-radius:8px;
-        gap:10px; white-space:nowrap; overflow:hidden;
-      ">
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-          <span class="tiny" style="flex:0 0 auto">${it.qty}×</span>
-          <strong style="flex:0 0 auto">${esc(it.name)}</strong>
-          <span style="flex:0 0 auto">${it.mana ? manaChips(it.mana) : ''}</span>
-          <span class="tag" style="flex:0 0 auto">${esc(it.type||'')}</span>
-        </div>
-        <button class="btn btn-danger" data-del-line="${idx}" type="button">Remove</button>
-      </li>`).join('')}
-  </ul>` : `<div class="hint">No cards yet.</div>`;
-
-    // delete buttons
-    host.querySelectorAll('button[data-del-line]').forEach(b=>{
-      b.addEventListener('click',()=>{
-        const i = parseInt(b.dataset.delLine,10);
-        const pidx = state.collection.findIndex(x=>x.id===id);
-        if(pidx>=0){
-          const cur = Array.isArray(state.collection[pidx].deck)?state.collection[pidx].deck:[];
-          cur.splice(i,1);
-          state.collection[pidx] = { ...state.collection[pidx], deck: cur };
-          saveAll(true); renderDeckEditor();
-        }
-      });
     });
-  }
-  renderDeckEditor();
+  });
+}
 
-  // Autocomplete wiring
+
+
+// Explicit renderer that doesn't depend on a global 'id'
+function renderDeckEditorFor(id){
+  const pack = draftPackFor(id) || state.collection.find(x=>x.id===id) || {};
+const deck = Array.isArray(pack.deck) ? pack.deck : [];
+
+  const host = $(`d_list_${id}`);
+  if(!host) return;
+
+  host.innerHTML = deck.length ? `
+    <ul style="list-style:none; margin:0; padding:0; display:grid; gap:6px">
+      ${deck.map((it,idx)=>`
+        <li style="
+          display:flex; align-items:center; justify-content:space-between;
+          border:1px dashed var(--line); padding:6px 8px; border-radius:8px;
+          gap:10px; white-space:nowrap; overflow:hidden;
+        ">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <span class="tiny" style="flex:0 0 auto">${it.qty}×</span>
+            <strong style="flex:0 0 auto">${esc(it.name)}</strong>
+            <span style="flex:0 0 auto">${it.mana ? manaChips(it.mana) : ''}</span>
+            <span class="tag" style="flex:0 0 auto">${esc(it.type||'')}</span>
+          </div>
+
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn xs"
+                    data-qedit="${esc(pack.id || id || '')}"
+                    data-card="${esc(it.name)}"
+                    type="button"
+                    title="Edit this card"
+                    aria-label="Edit ${esc(it.name)}">✎</button>
+
+            <button class="btn btn-danger" data-del-line="${idx}" type="button">Remove</button>
+          </div>
+        </li>`).join('')}
+    </ul>` : `<div class="hint">No cards yet.</div>`;
+
+  // delete buttons
+host.querySelectorAll('button[data-del-line]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const i = parseInt(b.dataset.delLine,10);
+    const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+      ? draftPackFor(id).deck.slice()
+      : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+         ? (state.collection.find(x=>x.id===id).deck.slice())
+         : []);
+    base.splice(i,1);
+    setDeckForPackSilent(id, base);
+    renderDeckEditorFor(id);
+  });
+});
+}
+
+
+
+// Autocomplete wiring
 const nameInput = $(`d_name_${id}`);
 const sug = $(`d_suggest_${id}`);
 let acTimer;
@@ -973,77 +1239,98 @@ document.addEventListener('click', (e)=>{
 
 
 
-  // click-away to close
-  document.addEventListener('click', (e)=>{
-    if(!sug) return;
-    if(!e.target.closest(`#d_suggest_${id}`) && !e.target.closest(`#d_name_${id}`)){
-      sug.style.display = 'none';
-    }
-  }, { once:true });
+// Add card
+row.querySelector(`#d_add_${id}`)?.addEventListener('click', async ()=>{
+  const nameEl = $(`d_name_${id}`);
+  const qtyEl  = $(`d_qty_${id}`);
+  const manaEl = $(`d_mana_${id}`);
+  const typeEl = $(`d_type_${id}`);
 
-  // Add card
-  row.querySelector(`#d_add_${id}`)?.addEventListener('click', async ()=>{
-    const nameEl = $(`d_name_${id}`);
-    const qtyEl  = $(`d_qty_${id}`);
-    const manaEl = $(`d_mana_${id}`);
-    const typeEl = $(`d_type_${id}`);
+  const name = nameEl.value.trim();
+  if(!name) return alert('Enter a card name.');
+  let mana = manaEl.value.trim();
+  let type = typeEl.value.trim();
+  const qty  = qtyEl.value;
 
-    const name = nameEl.value.trim();
-    if(!name) return alert('Enter a card name.');
-    let mana = manaEl.value.trim();
-    let type = typeEl.value.trim();
-    const qty  = qtyEl.value;
+  if(!mana || !type){
+    try{
+      const card = await scryfallNamedExactQueued(name);
+      if(!mana) mana = card.mana_cost || '';
+      if(!type) type = card.type_line || '';
+    }catch{/* allow manual */}
+  }
 
-    if(!mana || !type){
-      try{
-        const card = await scryfallNamedExactQueued(name);
-        if(!mana) mana = card.mana_cost || '';
-        if(!type) type = card.type_line || '';
-      }catch{/* allow manual */}
-    }
+  const item = normalizeDeckItem({ name, qty, mana, type });
+  if(!item) return alert('Enter a card name.');
 
-    const item = normalizeDeckItem({ name, qty, mana, type });
-    if(!item) return alert('Enter a card name.');
+  // write to DRAFT (not a persisted yet)
+  const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
+    ? draftPackFor(id).deck.slice()
+    : (Array.isArray((state.collection.find(x=>x.id===id)||{}).deck)
+       ? state.collection.find(x=>x.id===id).deck.slice()
+       : []);
+  base.push(item);
+  setDeckForPackSilent(id, base);
 
-    const pidx = state.collection.findIndex(x=>x.id===id);
-    if(pidx<0) return;
-    const cur = Array.isArray(state.collection[pidx].deck)?state.collection[pidx].deck:[];
-    cur.push(item);
-    state.collection[pidx] = { ...state.collection[pidx], deck: cur };
-    saveAll(true);
+  // reset mini-form
+  nameEl.value=''; qtyEl.value='1'; manaEl.value=''; typeEl.value='';
+  if (typeof renderDeckEditor === 'function') renderDeckEditor();
 
-    // reset mini-form
-    nameEl.value=''; qtyEl.value='1'; manaEl.value=''; typeEl.value='';
-    if(sug){ sug.style.display='none'; sug.innerHTML=''; }
+  // close suggestions if open
+  const sugBox = $(`d_suggest_${id}`);
+  if (sugBox){ sugBox.style.display='none'; sugBox.innerHTML=''; }
+});
 
-    renderDeckEditor();
-  });
+
 }
 
 
-
-// popup helper
-
+// ───────────────────────────────────────────────────────────
+// 4) UI primitives — modal
+// ───────────────────────────────────────────────────────────
+/*
+* openModal({ title, bodyHTML, okText, onOK, onOpen })
+* Lightweight modal helper. Adds ESC + click-away to close.
+*/
 function openModal({
   title='',
   bodyHTML='',
   okText='OK',
-  onOK=()=>{},
-  onOpen=()=>{}    // for focusing textarea etc.
+  cancelText='Cancel',
+  okClass=null,
+  cancelClass=null,
+  showCancel=true,
+  onOK=NOOP,
+  onOpen=NOOP
 }){
+
   const wrap = $('modal'), ttl = $('modalTitle'), body = $('modalBody');
   const ok = $('modalOK'), cancel = $('modalCancel');
+
+
+const _okPrevClass = ok.className;
+const _cancelPrevClass = cancel.className;
+if (okClass) ok.className = okClass;
+if (cancelClass) cancel.className = cancelClass;
+
 
   ttl.textContent = title;
   body.innerHTML  = bodyHTML;
   ok.textContent  = okText;
   wrap.classList.remove('hidden');
+cancel.textContent = cancelText;
 
-  // ---- close helpers (no 'close' name to avoid clashes)
-  function doClose(){
-    wrap.classList.add('hidden');
-    document.removeEventListener('keydown', onKeydownEsc);
-  }
+const hideCancel = (String(okText).toLowerCase() === 'close') || !showCancel;
+cancel.style.display = hideCancel ? 'none' : '';
+function doClose(){
+  ok.className = _okPrevClass;
+  cancel.className = _cancelPrevClass;
+
+  cancel.style.display = '';
+  wrap.classList.add('hidden');
+  document.removeEventListener('keydown', onKeydownEsc);
+}
+
   function onKeydownEsc(e){
     if (e.key === 'Escape') doClose();
   }
@@ -1063,7 +1350,7 @@ function openModal({
 
 
 
-// Parse lines like: "2 Lightning Bolt", "Lightning Bolt x3", "Lightning Bolt (2)", "Forest"
+// [UTIL] parseDeckText() — tolerant parser: "2 Name", "Name x3", "Name (2)", "Name"
 function parseDeckText(text){
   const out = [];
   const lines = String(text||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -1093,27 +1380,36 @@ function parseDeckText(text){
 }
 
 // Fetch mana/type via Scryfall for any items missing those fields
+// Fetch mana/type for items using a single batched call per ≤75 names.
+// Returns [{ name, mana, type, qty? }] — same shape the rest of the app expects.
 async function enrichWithScryfallMin(items){
-  const res = [];
-  for(const it of items){
-    try{
-      const card = await scryfallNamedExactQueued(it.name);
-      res.push({
-        name: it.name,
-        qty:  it.qty,
-        mana: card.mana_cost || '',
-        type: card.type_line || ''
-      });
-    }catch{
-      // fall back with no mana/type; can be edited later
-      res.push({ name: it.name, qty: it.qty, mana:'', type:'' });
-    }
+  const list = Array.isArray(items) ? items : [];
+  const names = [...new Set(
+    list.map(it => String(it?.name || '').trim()).filter(Boolean).map(s => s.toLowerCase())
+  )];
+
+  if (!names.length) return [];
+
+  // Batch resolve
+  const cards = await scryfallCollectionByNames(names);
+  const byName = new Map(cards.map(c => [String(c.name || '').toLowerCase(), c]));
+
+  const out = [];
+  for (const it of list) {
+    const key  = String(it?.name || '').trim().toLowerCase();
+    const card = byName.get(key);
+    out.push({
+      name: it.name,
+      qty : it.qty,
+      mana: card?.mana_cost || '',
+      type: card?.type_line || ''
+    });
   }
-  return res;
+  return out;
 }
 
 
-  function saveInlineEdit(id){
+function saveInlineEdit(id){
     const name=$(`e_name_${id}`).value.trim();
     const theme=$(`e_theme_${id}`).value.trim();
     const c1=$(`e_c1_${id}`).value, c2=$(`e_c2_${id}`).value, c3=$(`e_c3_${id}`).value;
@@ -1129,13 +1425,36 @@ async function enrichWithScryfallMin(items){
     const dup=state.collection.some(p=>p.id!==id&&p.name.toLowerCase()===name.toLowerCase()&&JSON.stringify(p.colors)===JSON.stringify(colors)&&String(p.set||'').toLowerCase()===set.toLowerCase());
     if(dup) return alert('That pack (name + colors + set) already exists.');
     const idx=state.collection.findIndex(p=>p.id===id);
-    if(idx>=0){state.collection[idx]={
-      ...state.collection[idx],name,theme:theme||null,colors,set:set||null,tags}; 
-    saveAll();}
-  }
+    {
+  // Use deck from draft if present; otherwise keep current deck
+  const draft = draftPackFor(id);
+  const deckFromDraft = Array.isArray(draft?.deck)
+    ? draft.deck
+    : (Array.isArray(state.collection[idx].deck) ? state.collection[idx].deck : []);
+
+  state.collection[idx] = {
+    ...state.collection[idx],
+    name,
+    theme: theme || null,
+    colors,
+    set: set || null,
+    tags,
+    deck: deckFromDraft
+  };
+
+  endPackDraft();
+  saveAll();
+}
+
+}
 
 
 
+/*
+* renderCollection()
+* Applies filters/sort/paging from state.settingsCollection and renders #packList.
+* Also updates pagination controls and eligible count.
+*/
 function renderCollection(){
   const settings = state.settingsCollection;
   $('collectionCount').textContent=`${state.collection.length} packs`;
@@ -1149,20 +1468,10 @@ function renderCollection(){
   const eligible=$('eligibleCount'); if(eligible) eligible.textContent=`Eligible after filter: ${eligibleAfterFilter(settings)}`;
 }
 
-
-
-
-  /*
-  
-  
-  
-  Guardrails display
-  
-  
-  
-  */
+//Guardrails display
 function renderGuardrails(settings = state.settingsCollection){
   const pool = state.collection.filter(p=>matchFilters(p, settings));
+  const eligibleEl = $('eligibleCount'); if (eligibleEl) eligibleEl.textContent = `Eligible after filter: ${pool.length}`;
   const mono=pool.filter(isMono).length, bi=pool.filter(isBi).length, tri=pool.filter(isTri).length;
   const triPct=settings.triSharePct, cap=settings.capOneTri, triExists=tri>0;
   const triChance=(triPct===0||!triExists)?0:(cap?triPct:Math.min(100,Math.round((triPct/100)*settings.optionsPerRoll*25)));
@@ -1182,7 +1491,10 @@ const triAllowed = (settings = state.settingsPlay)=> settings.triSharePct>0;
 
 
 
-  /* RNG Fairness */
+// ───────────────────────────────────────────────────────────
+// 6) Play/deal logic — fairness, rolling, dealing
+// ───────────────────────────────────────────────────────────
+/* RNG Fairness */
 function incOfferCounts(packs){
   if(!state.settingsPlay.fairMode) return;
   for(const p of packs){
@@ -1192,14 +1504,9 @@ function incOfferCounts(packs){
   saveAll(true);
 }
 
+const fairWeight=p=>1/(1+(state.fair[p.id]?.offer||0));
 
-  const fairWeight=p=>1/(1+(state.fair[p.id]?.offer||0));
-
-
-
-
-
-  /* Weighted drawing utility with constraints to help */
+/* Weighted drawing utility with constraints to help */
 function drawWithWeights({pool,wantTotal,wantTriPct,capOneTri,constraints,allowTri,settings}){
   const result=[];
   const useFair = !!(settings && settings.fairMode);
@@ -1256,6 +1563,11 @@ function renderOptionCard(p, settings){
 }
 
 
+
+/*
+* renderOptions(containerId, packs, onPick, settings)
+* Renders choose buttons and optional “View Deck” per option; wires handlers.
+*/
 function renderOptions(containerId, packs, onPick, settings = activeSettings()){
   const el=$(containerId);
 el.innerHTML = packs.map(p=>{
@@ -1271,10 +1583,16 @@ el.innerHTML = packs.map(p=>{
 }).join('');
   packs.forEach(p=>{
     const b=el.querySelector(`button[data-pick="${p.id}"]`);
-    on(b,'click',()=>onPick(p));
+on(b,'click',(ev)=>{
+  // clear previous highlight in this options grid
+  el.querySelectorAll('.option.chosen').forEach(n=>n.classList.remove('chosen'));
+  // mark this card as chosen
+  b.closest('.option')?.classList.add('chosen');
+  onPick(p);
+});
   });
 
-  // NEW: view deck buttons
+  // view deck buttons
   packs.forEach(p=>{
     const vb = el.querySelector(`button[data-viewdeck="${p.id}"]`);
     if (!vb) return;
@@ -1289,6 +1607,8 @@ el.innerHTML = packs.map(p=>{
 }
 
 
+
+// [UTIL] manaChips() — render mana cost as inline color pips
 function manaChips(mana){
   if(!mana) return '';
   const out = [];
@@ -1308,8 +1628,8 @@ function manaChips(mana){
   return `<span class="colors">${out.join('')}</span>`;
 }
 
-
-  /* CSV helpers */
+/* CSV helpers */
+// [UTIL] toCSV(rows) — export packs (name, theme, colors, set, tags)
 function toCSV(rows){
   const header = ['name','theme','colors','set','tags'].join(','); 
   const body = rows.map(r => [
@@ -1325,10 +1645,8 @@ function toCSV(rows){
   return header+'\n'+body;
 }
 
-
-
-
-  function parseCSV(text){
+// [UTIL] parseCSV(text) — tolerant CSV parser for imports
+function parseCSV(text){
     const lines=text.replace(/\r/g,'').split('\n').filter(Boolean); if(!lines.length) return [];
     const out=[]; lines.shift();
     for(const line of lines){
@@ -1353,7 +1671,149 @@ out.push({
  });
     }
     return out.filter(p=>p.colors.length>=1);
+}
+
+
+
+// [UTIL] matchFiltersWhy(pack, s) — best-effort reason if a pack is filtered out
+function matchFiltersWhy(p, s){
+  const N = x => (x||'').trim().toLowerCase();
+
+  // --- set ---
+  if (s.setFilter?.length){
+    const key = (p.set || 'Unlabeled');
+    if (!s.setFilter.some(k => N(k) === N(key))) return 'set';
   }
+
+  // --- color ---
+  if (s.colorFilter?.length){
+    const want = s.colorFilter;
+    const have = p.colors || [];
+    const mode = s.colorMode || 'any';
+    const hasAll = want.every(c => have.includes(c));
+    const hasAny = want.some(c => have.includes(c));
+    const exact  = hasAll && have.length === want.length;
+    if (mode === 'any'   && !hasAny) return 'color:any';
+    if (mode === 'all'   && !hasAll) return 'color:all';
+    if (mode === 'exact' && !exact)  return 'color:exact';
+  }
+
+  // --- theme ---
+  if (s.themeFilter?.length){
+    const th = N(p.theme);
+    if (!s.themeFilter.some(t => N(t) === th)) return 'theme';
+  }
+
+  // --- tags ---
+  if (s.tagFilter?.length){
+    const tags = (p.tags || []).map(N);
+    if (!s.tagFilter.some(t => tags.includes(N(t)))) return 'tag';
+  }
+
+  // --- search ---
+  if (s.search?.trim()){
+const hay = `${String(p.name||'')} ${String(p.theme||'')} ${String(p.set||'Unlabeled')}`.toLowerCase();
+  if (!hay.includes(s.search.trim().toLowerCase())) return 'search';  }
+
+  // --- has deck only ---
+  if (s.hasDeckOnly) {
+    if (!Array.isArray(p.deck) || p.deck.length === 0) return 'hasDeckOnly';
+  }
+
+    // --- numeric usage filters ---
+  const off = offeredOf(p), pk = pickedOf(p), pr = pickRateOf(p);
+  if (off < (s.minOffered || 0))    return 'minOffered';
+  if (pk  < (s.minPicked  || 0))    return 'minPicked';
+  if (pr  < (s.minPickRate || 0))   return 'minPickRate';
+  if (pr  > (s.maxPickRate ?? 100)) return 'maxPickRate';
+
+
+  return 'PASS';
+}
+
+// [UTIL] diagnoseCollection() — full report (ALL vs SHOWN under NO filters)
+function diagnoseCollection(){
+  const esc = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const N = x => (x||'').trim();
+  const n = x => (x||'').trim().toLowerCase();
+
+  // Build a NO-FILTERS snapshot of collection settings
+  const base = state.settingsCollection || {};
+  const s0 = {
+    ...base,
+    setFilter:   [],
+    colorFilter: [],
+    themeFilter: [],
+    tagFilter:   [],
+    search:      '',
+    colorMode:   'any',
+    hasDeckOnly: false,
+    minOffered:  0,
+   minPicked:   0,
+   minPickRate: 0,
+   maxPickRate: 100,
+   includeDeckSearch: false,
+   ctypeFilter: [],
+    page:        1
+  };
+
+  const ALL   = state.collection || [];
+  const SHOWN = ALL.filter(p => matchFilters(p, s0));
+
+  const missing = ALL.filter(p => !SHOWN.some(q => q.id === p.id));
+  let out = '';
+  out += `TOTAL (all): ${ALL.length}\n`;
+  out += `SHOWN (no filters): ${SHOWN.length}\n`;
+  out += `MISSING: ${missing.length}\n\n`;
+
+  if (missing.length){
+    out += `Missing packs (excluded even with NO filters):\n`;
+    for (const p of missing){
+      const why = matchFiltersWhy(p, s0);
+      const off = offeredOf(p), pk = pickedOf(p), pr = pickRateOf(p);
+      out += `- ${p.name}  [set="${p.set||''}", colors=${(p.colors||[]).join('')}, theme="${p.theme||''}", tags="${(p.tags||[]).join(', ')}"]  `
+      + `offered=${off} picked=${pk} pr=${pr}% `
+      + `reason=${why === 'PASS' ? 'OTHER' : why}\n`;
+
+    }
+    out += `\n`;
+  }
+
+  const countBy = (arr) => {
+    const m = new Map();
+    for (const p of arr){
+      const key = (p.set ? p.set : 'Unlabeled');
+      const k = N(key); // preserve case for display, trim spaces
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  };
+
+  const allBy   = countBy(ALL);
+  const shownBy = countBy(SHOWN);
+  out += `Per-set counts (ALL vs SHOWN under NO filters):\n`;
+  for (const k of [...new Set([...allBy.keys(), ...shownBy.keys()])].sort((a,b)=>a.localeCompare(b))){
+    const a = allBy.get(k) || 0;
+    const b = shownBy.get(k) || 0;
+    out += `• ${k}: ${a} vs ${b}${a!==b ? '  (mismatch)' : ''}\n`;
+  }
+
+  const body = `<pre style="white-space:pre-wrap;font:12px/1.45 monospace;margin:0">${esc(out)}</pre>`;
+  if (typeof openModal === 'function'){
+    openModal({ title:'Collection diagnostics', bodyHTML: body, okText:'Close' });
+  } else {
+    alert(out); // fallback
+  }
+}
+
+// Bind the existing button id
+(() => {
+  const btn = $('diagnoseSetMismatchBtn');
+  if (!btn || btn.__bound) return;
+  btn.__bound = true;
+  on(btn,'click', diagnoseCollection);
+})();
+
 
 
 /* ===== Pack deck helpers ===== */
@@ -1365,8 +1825,6 @@ function getSection(section = '', type = '') {
   if (s === 'creature' || /\bcreature\b/.test(t)) return 'Creature';
   return 'Non-Creature';
 }
-
-
 
 function normalizeDeckItem(x){
   const name = String(x.name||'').trim();
@@ -1382,8 +1840,6 @@ function normalizeDeckItem(x){
   return { name, qty, mana, type, section };
 }
 
-
-
 function computeThemeCounts(){
   const m = new Map();
   for(const p of state.collection){
@@ -1392,6 +1848,7 @@ function computeThemeCounts(){
   }
   return m;
 }
+
 function computeTagCounts(){
   const m = new Map();
   for(const p of state.collection){
@@ -1404,8 +1861,6 @@ function computeTagCounts(){
   }
   return m;
 }
-
-
 
 function renderNewPackDeck(){
   const host = $('n_list'); if(!host) return;
@@ -1433,12 +1888,12 @@ function renderNewPackDeck(){
   });
 }
 
-
 /* ===== Draft history and exports ===== */
 function loadHistory(){
   try{ return JSON.parse(localStorage.getItem(LS_HISTORY)) || []; }
   catch{ return []; }
 }
+
 function saveHistory(arr){
   try{ localStorage.setItem(LS_HISTORY, JSON.stringify(arr)); }catch{}
 }
@@ -1471,11 +1926,10 @@ function recordDraft(firstPack, secondPack){
 }
 
 function formatMTGA(deckArr, title){
-  // MTGA expects "Deck" / "Sideboard" headers; names with counts
-  const lines = ['Deck', ...deckArr.map(d=>`${d.qty} ${d.name}`), '', 'Sideboard'];
-  if(title) lines.unshift(`// ${title}`);
+  const lines = ['Deck', ...deckArr.map(d=>`${d.qty} ${d.name}`)];
   return lines.join('\n');
 }
+
 function formatMTGO(deckArr, title){
   const lines = deckArr.map(d=>`${d.qty} ${d.name}`);
   if(title) lines.unshift(`// ${title}`);
@@ -1503,9 +1957,8 @@ function renderHistory(){
         <div class="tiny">${h.deck.reduce((a,c)=>a+c.qty,0)} cards merged</div>
       </div>
       <div class="pill">
-        <button class="btn btn-gray" data-viewhist="${i}">🗂 View Deck</button>
-        <button class="btn btn-gray" data-exp-mtga="${i}">Copy MTGA</button>
-        <button class="btn btn-gray" data-exp-mtgo="${i}">Copy MTGO</button>
+        <button class="btn btn-gray" data-viewhist="${i}">View Deck</button>
+    <button class="btn btn-gray" data-exp-mtga="${i}">Copy Arena/MTG/Forge</button>
       </div>
     </div>
   `).join('') : `<div class="hint">No drafts yet.</div>`;
@@ -1513,8 +1966,8 @@ function renderHistory(){
   // export bindings
   history.forEach((h,i)=>{
     const title = `${h.first.name} + ${h.second.name}`;
-    host.querySelector(`button[data-exp-mtga="${i}"]`)?.addEventListener('click', ()=> copyText(formatMTGA(h.deck, title)));
-    host.querySelector(`button[data-exp-mtgo="${i}"]`)?.addEventListener('click', ()=> copyText(formatMTGO(h.deck, title)));
+    host.querySelector(`button[data-exp-mtga="${i}"]`)?.addEventListener('click', ()=> copyText(formatMTGA(h.deck)));
+  //  host.querySelector(`button[data-exp-mtgo="${i}"]`)?.addEventListener('click', ()=> copyText(formatMTGO(h.deck, title)));
   });
 
   // view merged deck
@@ -1529,9 +1982,6 @@ function renderHistory(){
   });
 }
 
-
-
-
 function setDeckForPack(packId, deckArray){
   const i = state.collection.findIndex(p=>p.id===packId);
   if(i<0) return false;
@@ -1541,6 +1991,164 @@ function setDeckForPack(packId, deckArray){
   state.collection[i] = { ...state.collection[i], deck };
   saveAll();
   return true;
+}
+
+
+
+// [EDIT-DRAFT] ephemeral editing helpers (pack-level)
+function beginPackDraft(id){
+  const i = state.collection.findIndex(p => p.id === id);
+  if (i < 0) return false;
+  // Deep clone current pack to a draft snapshot
+  const snap = JSON.parse(JSON.stringify(state.collection[i]));
+  state.__draft = { id, pack: snap };
+  return true;
+}
+function draftPackFor(id){
+  return (state.__draft && state.__draft.id === id) ? state.__draft.pack : null;
+}
+function endPackDraft(){
+  delete state.__draft;
+}
+
+
+function setDeckForPackSilent(packId, deckArray){
+  const deck = (Array.isArray(deckArray) ? deckArray : [])
+    .map(normalizeDeckItem)
+    .filter(Boolean);
+
+  // If we're editing this pack, write to the draft only (no save yet)
+  const d = draftPackFor(packId);
+  if (d) {
+    d.deck = deck;
+    return true; // do NOT persist; Save/Cancel will decide
+  }
+
+  // Normal path (not in draft): persist immediately
+  const i = state.collection.findIndex(p => p.id === packId);
+  if (i < 0) return false;
+  state.collection[i] = { ...state.collection[i], deck };
+  saveAll(true);
+  return true;
+}
+
+
+// Per card quick edit (no Scryfall lookup?)
+async function openQuickEditCard(packId, cardName){
+  const pack = draftPackFor(packId) || state.collection.find(p=>p.id===packId);
+if(!pack || !Array.isArray(pack.deck)) return;
+
+const idx = pack.deck.findIndex(
+    d => String(d.name||'').toLowerCase() === String(cardName||'').toLowerCase()
+  );
+  if(idx < 0) return alert('Card not found in this deck.');
+
+  const it = { ...pack.deck[idx] };
+
+  const bodyHTML = `
+    <div class="qedit">
+      <div class="row">
+        <label>Qty</label>
+        <input id="qeQty" type="number" min="1" value="${Math.max(1, parseInt(it.qty||1,10))}">
+      </div>
+      <div class="row">
+        <label>Name</label>
+        <input id="qeName" type="text" value="${esc(it.name||'')}" placeholder="Card name">
+      </div>
+      <div class="row">
+        <label>Mana</label>
+        <input id="qeMana" type="text" value="${esc(it.mana||'')}" placeholder="{1}{G}">
+      </div>
+      <div class="row">
+        <label>Type</label>
+        <input id="qeType" type="text" value="${esc(it.type||'')}" placeholder="Creature — Elf">
+      </div>
+    </div>
+  `;
+
+openModal({
+  title: `Edit Card — ${it.name}`,
+  okText: 'Save',
+  cancelText: 'Cancel',
+  bodyHTML,
+  onOK(){
+    const mod  = $('modalBody');
+    const qty  = Math.max(1, parseInt(mod.querySelector('#qeQty')?.value||'1',10));
+    const name = (mod.querySelector('#qeName')?.value||'').trim();
+    const mana = (mod.querySelector('#qeMana')?.value||'').trim();
+    const type = (mod.querySelector('#qeType')?.value||'').trim();
+
+    // Update the in-memory state (silent save: no full app re-render)
+    const base = (draftPackFor(packId)?.deck && Array.isArray(draftPackFor(packId).deck))
+  ? draftPackFor(packId).deck.slice()
+  : (Array.isArray(pack.deck) ? pack.deck.slice() : []);
+base[idx] = { ...base[idx], qty, name, mana, type };
+const ok = setDeckForPackSilent(packId, base);
+
+    if (!ok) { alert('Could not save this pack (pack ID mismatch).'); return; }
+
+    // --- Preferred: re-render just this editor
+    if (typeof renderDeckEditorFor === 'function') {
+      renderDeckEditorFor(packId);
+      return;
+    }
+
+    // --- Fallback: legacy renderer that relies on global `id`
+    if (typeof renderDeckEditor === 'function') {
+      const prev = window.id;
+      window.id = packId;
+      try { renderDeckEditor(); } finally { window.id = prev; }
+      return;
+    }
+
+// --- Last resort: minimal DOM-only refresh (draft-aware) ---
+(function domOnlyRefresh(){
+  const host = $(`d_list_${packId}`);
+  if (!host) return;
+
+  // Use draft if present; otherwise current saved deck
+  const freshPack = draftPackFor(packId) || state.collection.find(x=>x.id===packId) || {};
+  const fresh = Array.isArray(freshPack.deck) ? freshPack.deck : [];
+
+  host.innerHTML = fresh.length ? `
+    <ul style="list-style:none; margin:0; padding:0; display:grid; gap:6px">
+      ${fresh.map((it,i)=>`
+        <li style="
+          display:flex; align-items:center; justify-content:space-between;
+          border:1px dashed var(--line); padding:6px 8px; border-radius:8px;
+          gap:10px; white-space:nowrap; overflow:hidden;
+        ">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <span class="tiny" style="flex:0 0 auto">${it.qty}×</span>
+            <strong class="card-name" data-cardname="${esc(it.name)}" style="flex:0 0 auto">${esc(it.name)}</strong>
+            <span style="flex:0 0 auto">${it.mana ? manaChips(it.mana) : ''}</span>
+            <span class="tag" style="flex:0 0 auto">${esc(it.type||'')}</span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn xs" data-qedit="${esc(packId)}" data-card="${esc(it.name)}" data-card-index="${i}" type="button" title="Edit this card" aria-label="Edit ${esc(it.name)}">✎</button>
+            <button class="btn btn-danger" data-del-line="${i}" type="button">Remove</button>
+          </div>
+        </li>`).join('')}
+    </ul>` : `<div class="hint">No cards yet.</div>`;
+
+  // Delete (draft-aware; no immediate persistence)
+  host.querySelectorAll('button[data-del-line]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const i = parseInt(b.dataset.delLine,10);
+      const base = (draftPackFor(packId)?.deck && Array.isArray(draftPackFor(packId).deck))
+        ? draftPackFor(packId).deck.slice()
+        : (Array.isArray((state.collection.find(x=>x.id===packId)||{}).deck)
+           ? state.collection.find(x=>x.id===packId).deck.slice()
+           : []);
+      base.splice(i,1);
+      setDeckForPackSilent(packId, base); // stays in draft if editing
+      domOnlyRefresh();
+    });
+  });
+})();
+
+  }
+});
 }
 
 function getDeckSections(p){
@@ -1581,53 +2189,105 @@ const section = (title, arr)=>`
 
 
 
+// === Deck view: Scryfall type_line → display category =========================
+// Display order (only non-empty shown): Planeswalkers, Creatures, Instants,
+// Sorceries, Enchantments, Artifacts, Lands.
+// Precedence matters for multi-type cards (e.g., "Artifact Creature" → Creatures,
+// "Artifact Land" → Lands, "Enchantment Creature" → Creatures).
+const DECK_GROUP_ORDER = [
+  'Planeswalkers',
+  'Creatures',
+  'Instants',
+  'Sorceries',
+  'Enchantments',
+  'Artifacts',
+  'Lands'
+];
+
+function categorizeTypeLine(typeLine){
+  const t = String(typeLine || '').toLowerCase();
+
+  // Highest precedence first
+  if (/\bland\b/.test(t))          return 'Lands';
+  if (/\bplaneswalker\b/.test(t))  return 'Planeswalkers';
+  if (/\bcreature\b/.test(t))      return 'Creatures';
+  if (/\binstant\b/.test(t))       return 'Instants';
+  if (/\bsorcery\b/.test(t))       return 'Sorceries';
+  if (/\benchantment\b/.test(t))   return 'Enchantments';
+  if (/\bartifact\b/.test(t))      return 'Artifacts';
+
+  // Not part of the requested buckets; we’ll omit these from the render.
+  return 'Other';
+}
+// =============================================================================
 
 
-// === Render an deck into 3 columns (Creatures / Non-Creatures / Lands) ===
-// Accepts: deck = [{ name, qty, type, mana, section? }]
+
+
+// === Render a deck into 3 columns (Creatures / Non-Creatures / Lands)
+/*
+* renderDeckColumnsHTML(deck)
+* Returns HTML (no bindings) suitable for modal display.
+*/
+// === Render a deck grouped into 7 categories (hides empty categories) =========
 function renderDeckColumnsHTML(deck = []) {
-  const bucket = { creatures: [], noncreatures: [], lands: [] };
+  // Build empty buckets in the required display order
+  const buckets = Object.fromEntries(DECK_GROUP_ORDER.map(k => [k, []]));
 
-  for (const it of (deck||[])) {
-    const name = String(it.name||'').trim();
+  for (const row of (deck || [])) {
+    const name = String(row.name || '').trim();
     if (!name) continue;
 
-    const qty = Math.max(1, parseInt(it.qty||1,10));
-    const secName = getSection(it.section, it.type); // ← unified logic
+    const qty  = Math.max(1, parseInt(row.qty || 1, 10));
+    // Prefer Scryfall's type_line if present; fall back to your 'type' field
+    const typeLine = row.type_line || row.type || '';
 
-    let dest = 'noncreatures';
-    if (secName === 'Creature') dest = 'creatures';
-    else if (secName === 'Land') dest = 'lands';
-
-    bucket[dest].push({ ...it, qty, name });
+    const cat = categorizeTypeLine(typeLine);
+    if (!buckets[cat]) continue; // skip “Other”
+    buckets[cat].push({ ...row, name, qty });
   }
 
-  const ct = arr => arr.reduce((n,x)=>n+(parseInt(x.qty||1,10)||1),0);
-  const ul = arr => arr.length
-    ? `<ul style="margin:0;padding-left:18px">${arr.sort((a,b)=>a.name.localeCompare(b.name))
-        .map(c=>`<li>${c.qty>1?`${c.qty}× `:''}${esc(c.name)}</li>`).join('')}</ul>`
-    : `<p class="tiny" style="opacity:.75">— none —</p>`;
+  // Per-category total (sum quantities)
+  const totalQty = arr => arr.reduce((n, x) => n + (parseInt(x.qty || 1, 10) || 1), 0);
+
+  // Render one visible section (skip if empty)
+  const sectionHTML = (label, arr) => {
+    if (!arr.length) return ''; // hide unused categories
+    // Sort inside each category: Name A→Z (lightweight, consistent with your codebase)
+    arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    const items = arr.map(c => `
+      <li>
+        ${c.qty > 1 ? `${c.qty}× ` : ''}<span class="card-name" data-cardname="${esc(c.name)}">${esc(c.name)}</span>
+      </li>
+    `).join('');
+
+    return `
+      <section class="deckcol" style="border:1px solid var(--line,#2a2d31);border-radius:10px;padding:12px;">
+        <h3 style="margin:0 0 8px 0;font-size:14px;opacity:.9">${label} (${totalQty(arr)})</h3>
+        <ul style="margin:0;padding-left:18px">${items}</ul>
+      </section>
+    `;
+  };
+
+  // Only render non-empty sections in the specified order
+  const sections = DECK_GROUP_ORDER
+    .map(key => sectionHTML(key, buckets[key]))
+    .filter(Boolean)
+    .join('');
 
   return `
     <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
-      <section class="deckcol" style="border:1px solid var(--line,#2a2d31);border-radius:10px;padding:12px;">
-        <h3 style="margin:0 0 8px 0;font-size:14px;opacity:.9">Creatures (${ct(bucket.creatures)})</h3>
-        ${ul(bucket.creatures)}
-      </section>
-      <section class="deckcol" style="border:1px solid var(--line,#2a2d31);border-radius:10px;padding:12px;">
-        <h3 style="margin:0 0 8px 0;font-size:14px;opacity:.9">Non-Creatures (${ct(bucket.noncreatures)})</h3>
-        ${ul(bucket.noncreatures)}
-      </section>
-      <section class="deckcol" style="border:1px solid var(--line,#2a2d31);border-radius:10px;padding:12px;">
-        <h3 style="margin:0 0 8px 0;font-size:14px;opacity:.9">Lands (${ct(bucket.lands)})</h3>
-        ${ul(bucket.lands)}
-      </section>
+      ${sections || `<div class="hint">No cards yet.</div>`}
     </div>
   `;
 }
 
 
 
+// ───────────────────────────────────────────────────────────
+// 3) Scryfall helpers — rate-limited queue and tiny cache
+// ───────────────────────────────────────────────────────────
 /* Scryfall queue cache API)  */
 const SCRY_RATE_MS = 120; // ~8–10 req/sec
 const scry_q = [];
@@ -1653,10 +2313,8 @@ function scry_pump(){
 async function scryfallAutocomplete(q){
   const k = 'ac:'+q.toLowerCase();
   if(scry_cache.has(k)) return scry_cache.get(k);
-  const url = 'https://api.scryfall.com/cards/autocomplete?q='+encodeURIComponent(q);
-  const res = await fetch(url, { headers:{ 'Accept':'application/json' }});
-  if(!res.ok) throw new Error('autocomplete '+res.status);
-  const data = await res.json();
+const url = 'https://api.scryfall.com/cards/autocomplete?q='+encodeURIComponent(q);
+const data = await fetchJSON(url, 'autocomplete');
   const arr = Array.isArray(data.data) ? data.data.slice(0,20) : [];
   scry_cache.set(k, arr);
   return arr;
@@ -1664,26 +2322,207 @@ async function scryfallAutocomplete(q){
 async function scryfallNamedExact(name){
   const k = 'exact:'+name.toLowerCase();
   if(scry_cache.has(k)) return scry_cache.get(k);
-  const url = 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name);
-  const res = await fetch(url, { headers:{ 'Accept':'application/json' }});
-  if(!res.ok) throw new Error('named '+res.status);
-  const card = await res.json();
+const url = 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name);
+const card = await fetchJSON(url, 'named');
   scry_cache.set(k, card);
   return card;
 }
 const scryfallAutocompleteQueued = (q)=> enqueueScryfall(()=> scryfallAutocomplete(q));
 const scryfallNamedExactQueued  = (n)=> enqueueScryfall(()=> scryfallNamedExact(n));
 
+/* ============== Scryfall batch (POST /cards/collection) =======================
+   Up to 75 identifiers per request. We run each POST through existing
+   queue to stay under 10 req/sec, and reuse fetchJSon’s polite retries.
+============================================================================== */
 
+function chunk(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
 
-  /* Log & Session */
-  function log(msg){ const li=document.createElement('li'); li.innerHTML=`<span class="tiny">${esc(msg)}</span>`; $('log').prepend(li); }
-  function resetSession(){
-    state.session={firstOptions:[],chosenFirst:null,secondOptions:[],chosenSecond:null,usedIds:new Set()};
-    ['firstOptions','secondOptions','chosenFirst','finalPair'].forEach(id=>{const el=$(id); if(el) el.innerHTML='';});
-    $('chosenFirstWrap').style.display='none'; $('finalPairWrap').style.display='none'; $('overlapWrap').style.display='none';
-    $('statusLine').textContent='No session yet.'; $('log').innerHTML=''; renderGuardrails(activeSettings());
+async function scryfallCollectionByNames(names = []){
+  const identifiers = names
+    .map(n => ({ name: String(n || '').trim() }))
+    .filter(x => x.name);
+
+  const batches = chunk(identifiers, 75);
+  const all = [];
+
+  for (const batch of batches) {
+    const body = JSON.stringify({ identifiers: batch });
+    const data = await enqueueScryfall(() => fetchJSON(
+      'https://api.scryfall.com/cards/collection',
+      'collection',
+      { method: 'POST', headers: { 'Content-Type':'application/json' }, body, timeoutMs: 9000, retries: 4 }
+    ));
+    if (Array.isArray(data?.data)) all.push(...data.data);
   }
+  return all;
+}
+
+// Card hover image (Scryfall) — works anywhere with .card-name[data-cardname]
+(function initCardHoverPreview(){
+  if (document.getElementById('cardPreview')) return;
+  const tip = document.createElement('div');
+  tip.id = 'cardPreview';
+  tip.style.cssText = [
+    'position:fixed','z-index:9999','pointer-events:none','display:none',
+    'box-shadow:0 6px 18px rgba(0,0,0,.35)','border-radius:8px','overflow:hidden'
+  ].join(';');
+  document.body.appendChild(tip);
+
+  let currentName = '';
+  let token = 0;
+
+  function position(e){
+    const pad = 16;
+    const w = tip.offsetWidth || 320, h = tip.offsetHeight || 440;
+    let x = e.clientX + pad, y = e.clientY + pad;
+    if (x + w > window.innerWidth)  x = e.clientX - w - pad;
+    if (y + h > window.innerHeight) y = e.clientY - h - pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  document.addEventListener('mousemove', (e)=>{
+    if (tip.style.display !== 'none') position(e);
+  });
+
+  document.addEventListener('mouseover', async (e)=>{
+    const el = e.target.closest('.card-name');
+    if (!el) return;
+    const name = el.dataset.cardname || el.textContent.trim();
+    if (!name) return;
+
+    currentName = name;
+    tip.style.display = 'block';
+    tip.innerHTML = '<div style="padding:6px 8px;font-size:11px;background:#111;color:#ddd">Loading…</div>';
+    position(e);
+    const myToken = ++token;
+
+    try{
+      const card = await scryfallNamedExactQueued(name);
+      if (myToken !== token || currentName !== name) return;
+
+      let url = card?.image_uris?.normal || card?.image_uris?.large;
+      if(!url && Array.isArray(card?.card_faces) && card.card_faces[0]?.image_uris){
+        url = card.card_faces[0].image_uris.normal || card.card_faces[0].image_uris.large;
+      }
+      if (url){
+        tip.innerHTML = `<img src="${url}" alt="${esc(name)}" style="display:block; max-width:320px; height:auto;">`;
+      } else {
+        tip.innerHTML = `<div style="padding:6px 8px;font-size:11px;background:#111;color:#ddd">No image</div>`;
+      }
+    }catch{
+      if (myToken !== token) return;
+      tip.innerHTML = `<div style="padding:6px 8px;font-size:11px;background:#111;color:#ddd">No image</div>`;
+    }
+  });
+
+  document.addEventListener('mouseout', (e)=>{
+    const el = e.target.closest('.card-name');
+    if (!el) return;
+    tip.style.display = 'none';
+    tip.innerHTML = '';
+    currentName = '';
+    token++;
+  });
+})();
+
+
+
+// [UTIL] fetchJSON(url,label,timeoutMs) — aborts slow requests to avoid hangs
+// Robust JSON fetch with polite retries + 429 handling.
+// Backward-compatible signature: fetchJSON(url, label, timeoutMsOrOptions?)
+async function fetchJSON(url, label, timeoutOrOpts){
+  // keep compatibility with old calls that passed a number as 3rd arg
+  let opts = {};
+  if (typeof timeoutOrOpts === 'number') opts.timeoutMs = timeoutOrOpts;
+  else if (timeoutOrOpts && typeof timeoutOrOpts === 'object') opts = { ...timeoutOrOpts };
+
+  const {
+    method = 'GET',
+    headers = {},
+    body = null,
+    timeoutMs = 6000,
+    retries = 3,
+  } = opts;
+
+  const baseBackoff = 800;
+  const capBackoff  = 5000;
+  const wait = (ms)=> new Promise(r => setTimeout(r, ms));
+  const backoff = (attempt)=>{
+    const jitter = Math.floor(Math.random() * 300);
+    return Math.min(capBackoff, baseBackoff * Math.pow(2, attempt)) + jitter;
+  };
+
+  let attempt = 0;
+  while (true) {
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Accept':'application/json', ...headers },
+        body,
+        signal: ctl.signal
+      });
+
+      // 429 — honor Retry-After if present, else exponential backoff
+      if (res.status === 429) {
+        if (attempt >= retries) throw new Error(`${label} 429 (gave up)`);
+        const ra = parseInt(res.headers.get('Retry-After') || '', 10);
+        await wait(!isNaN(ra) ? ra * 1000 : backoff(attempt++));
+        continue;
+      }
+
+      // 5xx — transient; try again with backoff
+      if (res.status >= 500 && res.status <= 599) {
+        if (attempt >= retries) throw new Error(`${label} ${res.status} (gave up)`);
+        await wait(backoff(attempt++));
+        continue;
+      }
+
+      if (!res.ok) throw new Error(`${label} ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      // Abort/network — retry if budget left
+      if (attempt < retries && (err?.name === 'AbortError' || err?.message)) {
+        await wait(backoff(attempt++));
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+
+
+
+
+/* Log & Session */
+function log(msg){ const li=document.createElement('li'); li.innerHTML=`<span class="tiny">${esc(msg)}</span>`; $('log').prepend(li); }
+function resetSession(){
+  state.session = {
+    firstOptions: [],
+    chosenFirst: null,
+    secondOptions: [],
+    chosenSecond: null,
+    usedIds: new Set()
+  };
+
+  ['firstOptions','secondOptions','chosenFirst','finalPair'].forEach(id=>{
+    const el = $(id);
+    if (el) el.innerHTML = '';
+  });
+
+  // These elements might not exist if you removed/commented the blocks.
+  const cf = $('chosenFirstWrap'); if (cf) cf.style.display = 'none';
+  const fp = $('finalPairWrap');  if (fp) fp.style.display = 'none';
+  const ow = $('overlapWrap');    if (ow) ow.style.display = 'none';
+
+  $('statusLine').textContent = 'No session yet.';
+  $('log').innerHTML = '';
+  renderGuardrails(activeSettings());
+}
 
 function updateView(){
   const v = state.settingsCollection.view;
@@ -1712,9 +2551,10 @@ function updateView(){
   // play view
   renderSetFilter(state.settingsPlay, 'setFilterBox');
   renderColorFilter(state.settingsPlay, 'colorFilterBox');
+  renderThemeFilter(state.settingsPlay, 'playThemeFilterBox');
+  renderTagFilter(state.settingsPlay, 'playTagFilterBox');
   renderGuardrails(state.settingsPlay);
 }
-
 
 function renderEverything(){
   const v = state.settingsCollection.view;
@@ -1732,11 +2572,8 @@ function renderEverything(){
   refreshStorageHealth();
 }
 
-
-
-
-function renderThemeFilter(seedSettings = activeSettings()){
-  const box = $('themeFilterBox'); if(!box) return;
+function renderThemeFilter(seedSettings = activeSettings(), containerId = 'themeFilterBox'){
+  const box = $(containerId); if(!box) return;
   const counts = computeThemeCounts();
   const all = Array.from(counts.keys()).sort((a,b)=>a.localeCompare(b));
   const scope = (seedSettings === state.settingsPlay) ? 'play' : 'collection';
@@ -1776,6 +2613,9 @@ function renderThemeFilter(seedSettings = activeSettings()){
       s.themeFilter.push(key);
       el.classList.add('active'); el.setAttribute('aria-pressed','true');
     }
+    const eligible = $('eligibleCount');
+    if (eligible) eligible.textContent = `Eligible after filter: ${eligibleAfterFilter(s)}`;
+    renderGuardrails(s);
     if(s === state.settingsCollection){ s.page=1; renderCollection(); }
   };
 
@@ -1792,8 +2632,8 @@ function renderThemeFilter(seedSettings = activeSettings()){
   }
 }
 
-function renderTagFilter(seedSettings = activeSettings()){
-  const box = $('tagFilterBox'); if(!box) return;
+function renderTagFilter(seedSettings = activeSettings(), containerId = 'tagFilterBox'){ 
+  const box = $(containerId); if(!box) return;
 
   // counts of actual tags
   const counts = computeTagCounts();
@@ -1845,6 +2685,9 @@ function renderTagFilter(seedSettings = activeSettings()){
       s.tagFilter.push(key);
       el.classList.add('active'); el.setAttribute('aria-pressed','true');
     }
+    const eligible = $('eligibleCount');
+    if (eligible) eligible.textContent = `Eligible after filter: ${eligibleAfterFilter(s)}`;
+    renderGuardrails(s);
     if(s === state.settingsCollection){ s.page=1; renderCollection(); }
   };
 
@@ -1860,8 +2703,6 @@ function renderTagFilter(seedSettings = activeSettings()){
     box.__bound = true;
   }
 }
-
-
 
   /* DOM Ready */
   document.addEventListener('DOMContentLoaded',()=>{
@@ -1893,6 +2734,9 @@ on($('btnViewStats'),'click',()=>{
         theme=$('packTheme').value.trim(),
         c1=$('color1').value, c2=$('color2').value, c3=$('color3').value,
         set=$('packSet').value.trim();
+// Tags (comma/semicolon/newline/# as separators; spaces allowed within a tag)
+const tags = parseTags($('packTags')?.value || '');
+
 
   if(!name) return alert('Please enter a pack name.');
   if(!c1)   return alert('Please choose at least Color 1.');
@@ -1916,14 +2760,16 @@ on($('btnViewStats'),'click',()=>{
     colors,
     set: set || null,
     deck,
-    tags: []
+    tags
+
+  
   });
 
   saveAll();
   state.settingsCollection.page = 1;
 
-  // clear the add-pack form
-  ['packName','packTheme','packSet'].forEach(id=>$(id).value='');
+// clear the add-pack form
+['packName','packTheme','packSet','packTags'].forEach(id=>$(id).value='');
   window.resetManaSelection?.();
 
   state.newPackDeck = [];
@@ -1938,8 +2784,25 @@ on($('btnViewStats'),'click',()=>{
 
 
 
+// Press Enter in the Tags input to submit the Add Pack form
+(()=>{
+  const input = $('packTags');
+  const btn   = $('addPackBtn');
+  if (!input || !btn || input.__enterBound) return;
+  input.__enterBound = true;
+
+  input.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter') {
+      e.preventDefault();    // don't insert a newline / don't submit anything unintended
+      btn.click();
+    }
+  });
+})();
+
+
+
 on($('clearFormBtn'),'click',()=>{
-  ['packName','packTheme','packSet'].forEach(id=>$(id).value='');
+  ['packName','packTheme','packSet','packTags'].forEach(id=>$(id).value='');
   window.resetManaSelection?.();
 
   // reset the new-pack deck area !!!!!!!!!!!!!! >>>
@@ -1999,7 +2862,6 @@ on($('resetPicksBtn'),'click',()=>{
 });
 
 
-    // Second-roll / RNG settings
 // Second-roll / RNG settings (Play)
 on($('excludeUnpicked'),'change',e=>state.settingsPlay.excludeUnpicked=e.target.checked);
 on($('relaxIfStuck'),'change',e=>state.settingsPlay.relaxIfStuck=e.target.checked);
@@ -2033,35 +2895,12 @@ on($('players'),'change',e=>{
 });
 on($('avoidCollisions'),'change',e=>state.settingsPlay.avoidCollisions=e.target.checked);
    
-  
-
-   // Clear Filters button
-on($('clearFiltersBtn'),'click',()=>{
-  const s = activeSettings();
-  s.setFilter = [];
-  s.colorFilter = [];
-  s.tagFilter = [];
-  s.themeFilter = [];
-  renderSetFilter(s, 'colSetFilterBox');
-  renderColorFilter(s, 'colColorFilterBox');
-  renderTagFilter(s);
-  renderThemeFilter(s);
-  renderGuardrails(s);
-  if(s === state.settingsCollection){
-    s.page = 1;
-    renderCollection();
-  }
-});
-
-
 
 on($('clearHistoryBtn'),'click', ()=>{
   if(!confirm('Clear the saved draft history (last 10)?')) return;
   saveHistory([]);
   renderHistory();
 });
-
-
 
 
 on($('includeDeckSearch'),'change', e=>{
@@ -2071,13 +2910,11 @@ on($('includeDeckSearch'),'change', e=>{
 });
 
 
-
 // Initial render on load
 renderHistory();
 
 
-
-// === New-pack autosuggest (with Loading) ===
+// === New-pack autosuggest with Loading ===
 (() => {
   const input = $('n_name');
   if (!input) return;
@@ -2206,9 +3043,10 @@ on($('n_bulk_open'),'click', ()=>{
     onOpen: ()=> $('n_bulk_ta')?.focus(),
     onOK: async ()=>{
       const ta = $('n_bulk_ta'); if(!ta) return;
-      const items = parseDeckText(ta.value);
-      if(!items.length) return;
-      const enriched = await enrichWithScryfallMin(items);
+const items = parseDeckText(ta.value);
+if(!items.length) return;
+const enriched = await withBusy('Attuning mana channels…', () => enrichWithScryfallMin(items));
+
 
       // merge into staging deck
       const map = new Map(state.newPackDeck.map(d=>[d.name.toLowerCase(), { ...d }]));
@@ -2230,71 +3068,6 @@ on($('n_bulk_open'),'click', ()=>{
 });
 
 
-
-
-function renderTagFilter(seedSettings = activeSettings()){
-  const box = $('tagFilterBox'); if(!box) return;
-  const counts = computeTagCounts();
-  const all = Array.from(counts.keys()).sort((a,b)=>a.localeCompare(b));
-  const scope = (seedSettings === state.settingsPlay) ? 'play' : 'collection';
-  box.dataset.scope = scope;
-
-  if(!all.length){
-    box.innerHTML = '<div class="tiny">No tags yet.</div>';
-    seedSettings.tagFilter = [];
-    return;
-  }
-
-  box.classList.add('set-grid');
-  box.innerHTML = all.map(t=>{
-    const count = counts.get(t)||0;
-    const on = seedSettings.tagFilter.includes(t);
-    const safe = esc(t);
-    return `<div role="button" tabindex="0"
-                 class="set-chip ${on?'active':''}"
-                 data-tag="${safe}"
-                 aria-pressed="${on?'true':'false'}">
-              <span class="name">#${safe}</span>
-              <span class="count">${count}</span>
-            </div>`;
-  }).join('');
-
-  const currentSettings = () =>
-    (box.dataset.scope === 'play') ? state.settingsPlay : state.settingsCollection;
-
-  const toggle = (el)=>{
-    const s = currentSettings();
-    const key = el?.dataset?.tag; if(!key) return;
-    const on = s.tagFilter.includes(key);
-    if(on){
-      s.tagFilter = s.tagFilter.filter(x=>x!==key);
-      el.classList.remove('active'); el.setAttribute('aria-pressed','false');
-    }else{
-      s.tagFilter.push(key);
-      el.classList.add('active'); el.setAttribute('aria-pressed','true');
-    }
-    if(s === state.settingsCollection){ s.page=1; renderCollection(); }
-  };
-
-  if(!box.__bound){
-    box.addEventListener('click', e=>{
-      const el = e.target.closest('.set-chip'); if(!el) return; toggle(el);
-    });
-    box.addEventListener('keydown', e=>{
-      if(e.key===' ' || e.key==='Enter'){
-        const el = e.target.closest('.set-chip'); if(!el) return; e.preventDefault(); toggle(el);
-      }
-    });
-    box.__bound = true;
-  }
-}
-
-
-
-
-
-
-
 // Keyword search
 on($('searchPacks'),'input', e=>{
   state.settingsCollection.search = (e.target.value||'').toLowerCase();
@@ -2312,6 +3085,12 @@ on($('colorMode'),'change', e=>{
   state.settingsCollection.colorMode = e.target.value || 'any';
   state.settingsCollection.page = 1; renderCollection();
 });
+// Play: color mode (any/all/exact)
+on($('colorModePlay'),'change', e=>{
+  state.settingsPlay.colorMode = e.target.value || 'any';
+  renderGuardrails(state.settingsPlay);
+});
+
 
 // Type checkboxes
 function syncCtypeFromUI(){
@@ -2343,6 +3122,8 @@ wireNum('maxPickRate','maxPickRate', v=>Math.min(100,Math.max(0,v)));
 
 // Initialize defaults in UI (optional for now)
 $('colorMode').value = state.settingsCollection.colorMode;
+const cmp = $('colorModePlay');
+if (cmp) cmp.value = state.settingsPlay.colorMode;
 ['ctypeMono','ctypeBi','ctypeTri'].forEach(id=>{ if($(id)) $(id).checked = false; });
 $('minOffered').value   = state.settingsCollection.minOffered;
 $('minPicked').value    = state.settingsCollection.minPicked;
@@ -2386,8 +3167,6 @@ on($('rollFirstBtn'),'click',()=>{
     state.session.chosenFirst=p;
     incPick(p);
     state.session.usedIds.add(p.id);
-    $('chosenFirstWrap').style.display='';
-    $('chosenFirst').innerHTML=`<div class="option">${renderOptionCard(p, settings)}</div>`;
     $('statusLine').textContent='First choice locked. Now roll the second set.'; log(`Picked first: "${p.name}" [${p.colors.join('')}]`);
     const oSel=$('overlapColor'), oWrap=$('overlapWrap');
     if(p.colors.length===2){
@@ -2516,14 +3295,106 @@ function doSecondRoll(){
 }
 
 
-
     on($('rollSecondBtn'),'click',()=>{ if(!state.session.chosenFirst) return; doSecondRoll(); });
     on($('rerollSecondBtn'),'click',()=>{ if(!state.session.chosenFirst) return; state.session.secondOptions.forEach(p=>state.session.usedIds.delete(p.id)); state.session.secondOptions=[]; doSecondRoll(); log('Re-rolled second options.'); });
 
 
 
+/* [PATCH A] Clear Filters — bind once, context-aware (Play vs Collection) */
+(() => {
+  const btn = $('clearFiltersBtn');
+  if (!btn || btn.__bound) return;
+  btn.__bound = true;
 
-    function finalizeSecondRoll(picks, note = '', settings = state.settingsPlay){
+  on(btn, 'click', () => {
+    const s = activeSettings(); // Collection or Play
+    s.setFilter    = [];
+    s.colorFilter  = [];
+    s.themeFilter  = [];
+    s.tagFilter    = [];
+    s.search       = '';
+    s.page         = 1;
+    if (s === state.settingsCollection) {
+     s.minOffered = 0; s.minPicked = 0; s.minPickRate = 0; s.maxPickRate = 100;
+     s.hasDeckOnly = false; s.ctypeFilter = []; s.includeDeckSearch = false;
+   }
+
+    const isPlay       = (s === state.settingsPlay);
+    const setBoxId     = isPlay ? 'setFilterBox'        : 'colSetFilterBox';
+    const colorBoxId   = isPlay ? 'colorFilterBox'      : 'colColorFilterBox';
+    const themeBoxId   = isPlay ? 'playThemeFilterBox'  : 'themeFilterBox';
+    const tagBoxId     = isPlay ? 'playTagFilterBox'    : 'tagFilterBox';
+
+    renderSetFilter(s,   setBoxId);
+    renderColorFilter(s, colorBoxId);
+    renderThemeFilter(s, themeBoxId);
+    renderTagFilter(s,   tagBoxId);
+    renderGuardrails(s);
+
+    const input = $('searchPacks');
+    if (input) input.value = '';
+    // Reset Collection-only UI widgets to reflect cleared state
+   if (!isPlay) {
+     ['minOffered','minPicked','minPickRate','maxPickRate'].forEach(id=>{ if($(id)) $(id).value = (id==='maxPickRate' ? '100' : '0'); });
+     ['ctypeMono','ctypeBi','ctypeTri'].forEach(id=>{ if($(id)) $(id).checked = false; });
+     if ($('hasDeckOnly')) $('hasDeckOnly').checked = false;
+     if ($('includeDeckSearch')) $('includeDeckSearch').checked = false;
+     renderCollection();
+   }
+  });
+})();
+
+
+
+// Clear Filters — Collection view only
+(() => {
+  const btn = $('clearCollectionFiltersBtn');
+  if (!btn || btn.__bound) return;
+  btn.__bound = true;
+
+  on(btn, 'click', () => {
+    const s = state.settingsCollection;
+    s.setFilter   = [];
+    s.colorFilter = [];
+    s.themeFilter = [];
+    s.tagFilter   = [];
+    s.search      = '';
+    s.page        = 1;
+    s.minOffered = 0;
+    s.minPicked  = 0;
+    s.minPickRate= 0;
+    s.maxPickRate= 100;
+    s.hasDeckOnly= false;
+    s.ctypeFilter= [];
+    s.includeDeckSearch = false;
+
+    // re-render the collection filter UIs
+    renderSetFilter(s,   'colSetFilterBox');
+    renderColorFilter(s, 'colColorFilterBox');
+    renderThemeFilter(s, 'themeFilterBox');
+    renderTagFilter(s,   'tagFilterBox');
+
+    // clear the search box if present
+    const input = $('searchPacks'); if (input) input.value = '';
+    // reset the UI controls so they match state
+   ['minOffered','minPicked','minPickRate','maxPickRate'].forEach(id=>{ if($(id)) $(id).value = (id==='maxPickRate' ? '100' : '0'); });
+   ['ctypeMono','ctypeBi','ctypeTri'].forEach(id=>{ if($(id)) $(id).checked = false; });
+   if ($('hasDeckOnly')) $('hasDeckOnly').checked = false;
+   if ($('includeDeckSearch')) $('includeDeckSearch').checked = false;
+
+    // repaint the list and (optionally) guardrails/eligible label if you show it here
+    renderCollection();
+    renderGuardrails(s);
+  });
+})();
+
+
+
+/*
+* finalizeSecondRoll(picks, note, settings)
+* Ensures N unique options, applies fairness fills, renders #secondOptions and binds picks.
+*/
+function finalizeSecondRoll(picks, note = '', settings = state.settingsPlay){
       const uniq=[]; 
       for(const p of picks){ if(p && !uniq.some(x=>x.id===p.id)) uniq.push(p); }
       const N=settings.optionsPerRoll;
@@ -2554,8 +3425,11 @@ $('secondOptions').innerHTML = final.map(p=>{
 final.forEach(p=>{
   // Choose
   const pickBtn = $('secondOptions').querySelector(`button[data-pick="${p.id}"]`);
-  pickBtn?.addEventListener('click', ()=>{
-    state.session.chosenSecond = p;
+pickBtn?.addEventListener('click', ()=>{
+  // highlight in the second list
+  $('secondOptions')?.querySelectorAll('.option.chosen').forEach(n=>n.classList.remove('chosen'));
+  pickBtn.closest('.option')?.classList.add('chosen');
+  state.session.chosenSecond = p;
     $('finalPairWrap').style.display='';
     const a = state.session.chosenFirst;
 
@@ -2564,21 +3438,29 @@ final.forEach(p=>{
       <div class="option">${renderOptionCard(p, settings)}</div>`;
 
     // View Combined Deck on the final pair
-    const merged = combineDecks(a, p);
-    $('finalPair').insertAdjacentHTML('beforeend', `
-      <div class="pill" style="margin-top:8px">
-        <button id="btnViewFinalCombinedDeck" class="btn btn-cyan" type="button">View Combined Deck</button>
-      </div>
-    `);
-    $('btnViewFinalCombinedDeck')?.addEventListener('click', ()=>{
-      openModal({
-        title: `Combined Deck — ${a.name} + ${p.name}`,
-        okText: 'Close',
-        bodyHTML: (typeof renderDeckColumnsHTML === 'function')
-          ? renderDeckColumnsHTML(merged)
-          : renderDeckBlock({ deck: merged })
-      });
-    });
+// View + Export Combined Deck on the final pair
+const merged = combineDecks(a, p);
+$('finalPair').insertAdjacentHTML('beforeend', `
+  <div class="pill" style="margin-top:8px">
+    <button id="btnViewFinalCombinedDeck" class="btn btn-cyan"  type="button">View Combined Deck</button>
+    <button id="btnExpFinalMTGA"          class="btn btn-gray"  type="button">Copy MTGA</button>
+  </div>
+`);
+
+$('btnViewFinalCombinedDeck')?.addEventListener('click', ()=>{
+  openModal({
+    title: `Combined Deck — ${a.name} + ${p.name}`,
+    okText: 'Close',
+    bodyHTML: (typeof renderDeckColumnsHTML === 'function')
+      ? renderDeckColumnsHTML(merged)
+      : renderDeckBlock({ deck: merged })
+  });
+});
+
+// NEW: export buttons
+const title = `${a.name} + ${p.name}`;
+$('btnExpFinalMTGA')?.addEventListener('click', ()=> copyText(formatMTGA(merged)));
+// MTGO Button thing $('btnExpFinalMTGO')?.addEventListener('click', ()=> copyText(formatMTGO(merged, title)));
 
     $('statusLine').textContent='Final pair ready!';
     log(`Picked second: "${p.name}" [${p.colors.join('')}]`);
@@ -2600,18 +3482,13 @@ final.forEach(p=>{
 
 
       $('statusLine').textContent = `Second options rolled (${N}). Pick one. ${note}`; log(`Rolled second ${N} options${note?' '+note:''}.`);
-    }
+}
 
-
-
-    // Player mode
+// Player mode
 on($('dealBtn'),'click',()=>{
   const settings = state.settingsPlay;
   const P=settings.players, out=[], tmpUsed=new Set(), avoid=settings.avoidCollisions;
   if(state.collection.filter(p=>matchFilters(p, settings)).length < P*2) return alert('Not enough eligible packs to deal pairs for all players.');
-      
-      
-      
       for(let i=1;i<=P;i++){
         let pool1=state.collection.filter(p=>(!avoid||!tmpUsed.has(p.id))&&matchFilters(p, settings));
         if(!pool1.length){ alert('Ran out of packs.'); break; }
@@ -2669,29 +3546,71 @@ wrap.innerHTML = out.map((pair,i)=>`
       </div>
     </div>
     <div class="pill" style="margin-top:8px">
-      <button class="btn btn-cyan" type="button" data-viewdeal="${i}">🗂 View Combined Deck</button>
+      <button class="btn btn-cyan" type="button" data-viewdeal="${i}">View Combined Deck</button>
+<button class="btn btn-gray" type="button" data-expdeal-mtga="${i}">Copy Arena/MTG/Forge</button>
     </div>
   </div>
 `).join('') || `<div class="hint">No result.</div>`;
 
-// per-player combined deck view
-out.forEach((pair,i)=>{
-  wrap.querySelector(`button[data-viewdeal="${i}"]`)?.addEventListener('click', ()=>{
-    const merged = combineDecks(pair.first, pair.second);
-    openModal({
-      title: `Player ${i+1} — ${pair.first.name} + ${pair.second.name}`,
-      okText: 'Close',
-      bodyHTML: renderDeckColumnsHTML(merged)
-    });
-  });
-});
+state.dealtPairs = out; // used by the delegated handler
+
+
 
 $('dealSummary').textContent=`Dealt ${out.length} / ${settings.players}${settings.avoidCollisions?' (no pack reuse)':''}.`;
     });
 
-
-
     on($('clearDealsBtn'),'click',()=>{$('dealtResults').innerHTML=''; $('dealSummary').textContent='';});
+
+
+
+/* Quick Play — one delegated click handler also prevents duplicate listeners */
+(()=>{
+  const wrap = $('dealtResults');
+  if (!wrap || wrap.__delegated) return;
+  wrap.__delegated = true;
+
+  wrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    // latest dealt round (set in Step 2)
+    const arr = state.dealtPairs || [];
+    const idxFrom = (attr) => parseInt(btn.getAttribute(attr) || '-1', 10);
+
+    // View combined deck
+    if (btn.hasAttribute('data-viewdeal')) {
+      const i = idxFrom('data-viewdeal'); if (!(i in arr)) return;
+      const pair = arr[i], first = pair.first ?? pair[0], second = pair.second ?? pair[1];
+      const merged = combineDecks(first, second);
+      openModal({
+        title: `Player ${i+1} — ${first.name} + ${second.name}`,
+        okText: 'Close',
+        bodyHTML: renderDeckColumnsHTML(merged)
+      });
+      return;
+    }
+
+    // Copy MTGA (no title)
+    if (btn.hasAttribute('data-expdeal-mtga')) {
+      const i = idxFrom('data-expdeal-mtga'); if (!(i in arr)) return;
+      const pair = arr[i], first = pair.first ?? pair[0], second = pair.second ?? pair[1];
+      copyText(formatMTGA(combineDecks(first, second)));
+      return;
+    }
+
+    // Copy MTGO (keep title)
+    // if (btn.hasAttribute('data-expdeal-mtgo')) {
+    //  const i = idxFrom('data-expdeal-mtgo'); if (!(i in arr)) return;
+    //  const pair = arr[i], first = pair.first ?? pair[0], second = pair.second ?? pair[1];
+    //  const title  = `${first.name} + ${second.name}`;
+    //  copyText(formatMTGO(combineDecks(first, second), title));
+    //  return;
+    // }
+  });
+})();
+
+
+
 
     // Keyboard shortcuts — ignore modifiers, inputs, hidden state; silent when not ready
     document.addEventListener('keydown',e=>{
@@ -2768,6 +3687,8 @@ $('dealSummary').textContent=`Dealt ${out.length} / ${settings.players}${setting
       state.collection=demo; state.fair={}; saveAll(); resetSession(); state.settingsCollection.page = 1; $('statusLine').textContent='Demo packs loaded.'; refreshStorageHealth(); log('Demo packs loaded (12).');
     });
 
+
+
 // Init
 resetSession();
 state.settingsCollection.view = 'collection';
@@ -2784,15 +3705,15 @@ renderEverything();
   }
 
   ready(() => {
-    const grid = document.getElementById('manaGrid');        // <div id="manaGrid">…</div>
+    const grid = document.getElementById('manaGrid');
     if (!grid) return;
 
-    const hint = document.getElementById('manaHint');         // <div id="manaHint">
-    const h1 = document.getElementById('color1');             // hidden inputs you already use
+    const hint = document.getElementById('manaHint');
+    const h1 = document.getElementById('color1');
     const h2 = document.getElementById('color2');
     const h3 = document.getElementById('color3');
 
-    const ORDER = ['W','U','B','R','G','C']; // include Colorless
+    const ORDER = ['W','U','B','R','G','C'];
 
     function getSelected(){
       const sel = Array.from(grid.querySelectorAll('.mana-btn.selected')).map(b => b.dataset.color);
@@ -2812,7 +3733,7 @@ renderEverything();
       }
     }
 
-    // Click to toggle (max 3)
+    // Click to toggle (max 3 fo now)
     grid.addEventListener('click', (e)=>{
       const btn = e.target.closest('.mana-btn');
       if (!btn || !grid.contains(btn)) return;
@@ -2846,11 +3767,24 @@ renderEverything();
   });
 })();
 
+// Delegated handler for quick edit buttons in deck lists
+// [UTIL] lb(arr) — render top-pick list items (Stats)
+document.addEventListener('click', (e)=>{
+  const b = e.target.closest('button[data-qedit]');
+  if(!b) return;
+  const packId = b.getAttribute('data-qedit');
+  const card = b.getAttribute('data-card');
+  if(packId && card) openQuickEditCard(packId, card);
+});
 
-
-
+// [UTIL] safePct(n, d) — percent helper (Stats)
 function safePct(n, d){ return d ? Math.round((n/d)*100) : 0; }
 
+
+
+// ───────────────────────────────────────────────────────────
+// 7) Stats view — aggregation & rendering
+// ───────────────────────────────────────────────────────────
 function computeUsageStats(){
   const packs = state.collection || [];
   const fair  = state.fair || {};
@@ -2890,18 +3824,119 @@ function computeUsageStats(){
   const bySetArr = Array.from(bySet.values()).map(s=>({ ...s, pr:safePct(s.pick, s.offer)}))
                        .sort((a,b)=> b.packs - a.packs);
 
-  const topN = 5, minOffers = 5;
+    const topN = 5, minOffers = 5;
   const topOffered = rows.slice().sort((a,b)=> b.offer - a.offer).slice(0, topN);
   const topPicked  = rows.slice().sort((a,b)=> b.pick  - a.pick ).slice(0, topN);
   const topPickRate = rows.filter(r=>r.offer>=minOffers)
                           .sort((a,b)=> b.pr - a.pr)
                           .slice(0, topN);
 
+  // “Most ignored”: seen a lot but not picked
+  const lowIgnored = rows
+    .filter(r=>r.offer>=minOffers)
+    .map(r=>({ ...r, snubs: r.offer - r.pick }))
+    .sort((a,b)=>{
+      if (b.snubs !== a.snubs) return b.snubs - a.snubs;
+      if (a.pr   !== b.pr)   return a.pr   - b.pr;
+      return b.offer - a.offer;
+    })
+    .slice(0, topN);
+
   return {
     totalPacks, totalOffered, totalPicked, overallPR, zeroOffered, zeroPicked,
-    byColor, byCtype, bySetArr, topOffered, topPicked, topPickRate
+    byColor, byCtype, bySetArr, topOffered, topPicked, topPickRate, lowIgnored
   };
 }
+
+
+
+/**
+ * renderStatsKPI()
+ * Populates #statsKPI with quick metrics from state.collection counters.
+ * Side-effects: updates innerHTML of #statsKPI (if present).
+ */
+function renderStatsKPI(){
+  const el = $('statsKPI'); if(!el) return;
+  const packs = state.collection || [];
+  const total = packs.length;
+
+  const offered = packs.reduce((a,p)=> a + offeredOf(p), 0);
+  const picked  = packs.reduce((a,p)=> a + pickedOf(p), 0);
+  const avgPick = safePct(picked, offered);
+  const uniquePlayed = packs.filter(p=> pickedOf(p) > 0).length;
+
+  const triPicked = packs
+    .filter(p => (p.colors||[]).length === 3)
+    .reduce((a,p)=> a + pickedOf(p), 0);
+  const triShare = picked ? Math.round((triPicked/picked)*100) : 0;
+
+  let mostPicked = null, mostIgnored = null;
+  for (const p of packs){
+    if (!mostPicked || pickedOf(p) > pickedOf(mostPicked)) mostPicked = p;
+    const o = offeredOf(p), pk = pickedOf(p);
+    if (o > 0 && pk === 0) {
+      if (!mostIgnored || o > offeredOf(mostIgnored)) mostIgnored = p;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="kpi"><div class="label">Total Packs</div><div class="value">${total}</div></div>
+    <div class="kpi"><div class="label">Unique Played</div><div class="value">${uniquePlayed}</div></div>
+    <div class="kpi"><div class="label">Avg Pick%</div><div class="value">${avgPick}%</div></div>
+    <div class="kpi"><div class="label">Tri Share</div><div class="value">${triShare}%</div></div>
+    <div class="kpi"><div class="label">Most Picked</div><div class="value">${esc(mostPicked?.name||'—')}</div></div>
+    <div class="kpi"><div class="label">Most Ignored</div><div class="value">${esc(mostIgnored?.name||'—')}</div></div>
+  `;
+}
+
+
+/**
+ * renderLowPerformers()
+ * “Most ignored” = many offers but few/no picks.
+ * Uses fair stats (state.fair); configurable via data-* on #statsLowPerf:
+ *   data-min-offered="5"  data-top-n="5"
+ */
+function renderLowPerformers(){
+  const el = $('statsLowPerf'); if(!el) return;
+  const minOffered = parseInt(el.dataset.minOffered || '5', 10);
+  const topN       = parseInt(el.dataset.topN || '5', 10);
+
+  const rows = (state.collection || []).map(p => {
+    const offered = offeredOf(p);
+    const picked  = pickedOf(p);
+    return {
+      name: p.name,
+      offered,
+      picked,
+      pr: safePct(picked, offered),
+      snubs: Math.max(0, offered - picked)
+    };
+  }).filter(r => r.offered >= minOffered);
+
+  const worst = rows
+    .sort((a,b)=>{
+      if (b.snubs !== a.snubs) return b.snubs - a.snubs;
+      if (a.pr   !== b.pr)     return a.pr   - b.pr;
+      return b.offered - a.offered;
+    })
+    .slice(0, topN);
+
+  const items = worst.map(r => `
+    <li>
+      <strong>${esc(r.name)}</strong>
+      <span class="tiny">— ${r.pr}% pick (${r.picked}/${r.offered}), ${r.snubs} snub${r.snubs===1?'':'s'}</span>
+    </li>`).join('');
+
+  el.innerHTML = `
+    <div class="callout-title">Most ignored (≥${minOffered} offers)</div>
+    <ul class="minilist">
+      ${items || `<li class="hint">Not enough data yet.</li>`}
+    </ul>
+  `;
+  el.classList.remove('hidden');
+}
+
+
 
 function renderStatsPanel(){
   const host = document.getElementById('statsPanel');
@@ -2961,10 +3996,15 @@ function renderStatsPanel(){
         <h4>Best Pick-Rate (≥5 offers)</h4>
         <ul>${lb(s.topPickRate)}</ul>
       </div>
+      <div class="mini-table">
+        <h4>Most Ignored (≥5 offers)</h4>
+        <ul>${lb(s.lowIgnored)}</ul>
+      </div>
     </div>
   `;
 }
 
+// [UTIL] usageToCSV() — export usage CSV
 function usageToCSV(){
   const rows = state.collection.map(p=>{
     const f = state.fair[p.id] || {};
@@ -2980,6 +4020,7 @@ function usageToCSV(){
   const header = Object.keys(rows[0]||{
     id:'',name:'',theme:'',colors:'',set:'',offered:0,picked:0,pick_rate_pct:0
   });
+  // [UTIL] escCSV(v) — quote+escape for CSV fields
   const escCSV = (v)=> {
     const s=String(v??'');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
@@ -2989,5 +4030,5 @@ function usageToCSV(){
 }
 
 
-
+// THE END OF THE WORLD
 })();
