@@ -1,0 +1,109 @@
+Global:
+    - Clean up the look, some parts are too tight
+    - Mana population for Jump In packs based on casting cost
+    - one-click backup/restore JSON with timestamp
+    - Magic Link Sync
+    - Buy Cards select and click
+    - affiliate programs
+    - Merch? buttons and tokens
+        - Doodle tokens
+    - Card and Pack pricing
+    - Mana Symbles on cards and packs
+
+
+Collection:
+    - Pack ban toggle in collection; temp removal from environment
+    - Import decks from other sites. CubeCobra, Arkidekt, and so on.
+
+
+Play:
+    - Save slots for multiple environments, load on drop down
+    - a seed toggle to replay the same draft
+    - Allow 5 color pack making
+
+
+Offical:
+    - Offical packs with set assigned cards
+
+
+Community:
+    - Seed packs from the community, aka import and export a single pack or selection of packs to and from the collection
+    - 
+
+
+Stats:
+    - 
+
+
+Reddit Ideas:
+    - end-to-end tests around export formats, and basic telemetry. 
+    - I’ve had good luck pairing Sentry for errors and Supabase for auth/storage, with DreamFactory generating quick REST APIs to log draft events.
+
+
+Bugs and Issues:
+    - When page is loading it shows the page without css, can we fix this or add a loading screen
+    - Banner files sizes are too big
+
+
+
+v0.7.5 -- 12/3/25
+- Collection Panal
+    -
+- Play Panal
+    - Phantom Offical Drafting
+- WotC Packs Panal
+    - JumpStart
+        - 
+    - JumpIn
+        - 
+- Community Panal
+    -
+- Stats Panal
+    - 
+- Global
+    - 
+
+
+
+v0.7.4 -- 12/19/25 - Done
+- Collection Panal
+    -
+- Play Panal
+    - 
+- WotC Packs Panal
+    - JumpStart
+        O jUMPSTART 2022
+        O Avatar Jumpstart
+    - JumpIn
+        O Final Fantasy
+- Community Panal
+    - Nothing
+- Stats Panal
+    - Nothing
+- Global
+    O Magic Link Sync
+    O Wizards and Scryfall statements
+
+
+
+v0.7.3 -- 10/5/25 -- Done
+- Offical Panal
+    - Archive of offical products
+    - Look at pack card list
+    - We can filter the Offical Collection
+        - We can filter by JumpStart or Jump In
+        - By Set with in those environments
+        - Serch the packs
+        - Filter by color
+    - Jump In packs
+        - Full pack list with weights
+        - Genarate and import pack for play
+        - Import pack to personal collection
+    - This opens up more pack flexability with comunity sets in mind
+- Collection Panal
+    - Deletetion warning
+- Community Panal
+    - Coming soon
+    - Input welcome
+- Global
+    - Page memory, remebers what page

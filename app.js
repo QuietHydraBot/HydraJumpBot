@@ -24,7 +24,9 @@ SECTIONS:
 */
 (()=>{
 
-
+// === BOOT MARKER ===
+window.__HYDRA_BOOT__ = 'Hydra script loaded: ' + (document.currentScript?.src || '(inline)') + ' @ ' + new Date().toISOString();
+console.log(window.__HYDRA_BOOT__);
 
 // ───────────────────────────────────────────────────────────
 // 1) Boot & globals — constants, state, utils
@@ -32,6 +34,7 @@ SECTIONS:
   const LS_KEY='jumpstart_collection_v1';
   const LS_FAIR='jumpstart_fair_stats_v1';
   const LS_HISTORY = 'jumpstart_draft_history_v1';
+  const LS_VIEW = 'jumpstart_last_view_v1';
   // [UTIL] $(id) — DOM getter
   const $=id=>document.getElementById(id);
   // [UTIL] on(el,ev,fn) — event binder
@@ -63,17 +66,73 @@ SECTIONS:
   finally { clearTimeout(timer); hideBusy(); }
   }
 
+  // [OFFICIAL] Optional image overrides (pack id or name -> url)
+window.OFFICIAL_IMAGE_MAP = {
+  // 'jmp_goblins': 'img/goblins-pack.jpg',
+  // 'Healing': 'img/healing.jpg'
+};
 
   // [UTIL] $, on, uid, esc — DOM & string helpers
 
   const NO_TAGS = '__NO_TAGS__';
 
   // [UTIL] chips(colors) — render color chip spans
-  const chips=(colors)=>`<div class="colors">${colors.map(c=>`<span class="c ${c}">${c}</span>`).join('')}</div>`;
-  const typeOf=p=>p.colors.length===1?'Mono':(p.colors.length===2?'Two-Color':(p.colors.length===3?'Tri-Color':''));
-  const typeChip=p=>{const t=typeOf(p); if(t==='Mono')return `<span class="ctype mono">Mono</span>`; if(t==='Two-Color')return `<span class="ctype bi">Two-Color</span>`; if(t==='Tri-Color')return `<span class="ctype tri">Tri-Color</span>`; return '';};
+const chips=(colors)=>`<div class="colors">${colors.map(c=>`<span class="c ${c}">${c}</span>`).join('')}</div>`;
 
-  const isMono=p=>p.colors.length===1, isBi=p=>p.colors.length===2, isTri=p=>p.colors.length===3;
+// New: richer type names (includes Colorless/Four/Five)
+const typeOf = (p)=>{
+  const cols = Array.isArray(p.colors) ? p.colors : [];
+  if (cols.length === 0) return '';
+  if (cols.length === 1 && cols[0] === 'C') return 'Colorless';
+  if (cols.length === 1) return 'Mono';
+  if (cols.length === 2) return 'Two-Color';
+  if (cols.length === 3) return 'Tri-Color';
+  if (cols.length === 4) return 'Four-Color';
+  if (cols.length >= 5)  return 'Five-Color';
+  return '';
+};
+
+const typeChip = (p)=>{
+  const t = typeOf(p);
+  const cls = {
+    'Mono':'mono',
+    'Two-Color':'bi',
+    'Tri-Color':'tri',
+    'Four-Color':'quad',
+    'Five-Color':'penta',
+    'Colorless':'colorless'
+  }[t];
+  return t ? `<span class="ctype ${cls}">${t}</span>` : '';
+};
+
+const isMono = p => p.colors.length===1 && p.colors[0] !== 'C';
+const isBi   = p => p.colors.length===2;
+const isTri  = p => p.colors.length===3;
+// (4- and 5-color packs are treated as “other” for guardrails today)
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
  
   // [UTIL] pickRandom(arr, n) — sample without replacement
   const pickRandom=(arr,n)=>{const a=arr.slice(),r=[];while(a.length&&r.length<n){r.push(a.splice(Math.floor(Math.random()*a.length),1)[0]);}return r;};
@@ -144,6 +203,16 @@ const settingsDefaults = {
   themeFilter:[] 
 };
 
+// [OFFICIAL] view state (filters and paging)
+state.official = {
+  search: '',
+  colorFilter: [],
+  colorMode: 'any',
+  setFilter: [],
+  kind: 'ALL',
+  page: 1,
+  pageSize: 24
+};
 
 
 // [UTIL] Parse tags: supports hashtags (#), commas, semicolons, and newlines.
@@ -206,7 +275,13 @@ function loadCollection(){
     if(!raw){setStorageStatus('ok'); 
       return [];} const arr=JSON.parse(raw);
       setStorageStatus('ok'); 
-      return Array.isArray(arr)?arr.filter(p=>p&&p.id&&p.name&&Array.isArray(p.colors)&&p.colors.length>=1&&p.colors.length<=3):[];}catch(e){state.storageOK=false; 
+      return Array.isArray(arr)
+        ? arr.filter(p =>
+          p && p.id && p.name &&
+          Array.isArray(p.colors) &&
+          p.colors.length >= 1 && p.colors.length <= 5
+        ): [];
+    }catch(e){state.storageOK=false; 
         setStorageStatus('limited'); 
         return [];
 }}
@@ -253,8 +328,481 @@ async function refreshStorageHealth(){
 
   $('storeBar').style.width = pct + '%';
   $('storeLine').textContent = `Using ${formatBytes(lsBytes)} of 5 MB (${pct}%)`;
-  $('storeHint').textContent = `Stored locally in your browser. Private/Incognito may not keep around.`;
+  $('storeHint').textContent = `Stored locally in your browser. Private/Incognito may send it to the graveyard.`;
 }
+
+
+
+
+
+
+
+/* ─────────────────────────────────────────────────────────
+ * Magic Link Sync — collection an fair stats
+ * Builds a URL-safe payload from the same data as Backup:
+ *   { collection: state.collection, fair: state.fair, ts }
+ * Payload format: "v1." + base64(json) OR "v1z." + base64(gzip(json))
+ * Gzip is used when supported and smaller.
+ * ─────────────────────────────────────────────────────────── */
+
+function _bytesToB64Url(bytes){
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function _b64UrlToBytes(s){
+  s = String(s||'').replace(/-/g,'+').replace(/_/g,'/');
+  const pad = s.length % 4 ? 4 - (s.length % 4) : 0;
+  s += '='.repeat(pad);
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function _maybeGzip(bytes){
+  if (typeof CompressionStream !== 'function') return null;
+  try{
+    const cs = new CompressionStream('gzip');
+    const writer = cs.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    const buf = await new Response(cs.readable).arrayBuffer();
+    return new Uint8Array(buf);
+  }catch{ return null; }
+}
+async function _maybeGunzip(bytes){
+  if (typeof DecompressionStream !== 'function') return null;
+  try{
+    const ds = new DecompressionStream('gzip');
+    const writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    const buf = await new Response(ds.readable).arrayBuffer();
+    return new Uint8Array(buf);
+  }catch{ return null; }
+}
+
+function _magicPayload(){
+  return {
+    v: 1,
+    ts: new Date().toISOString(),
+    collection: Array.isArray(state.collection) ? state.collection : [],
+    fair: (state.fair && typeof state.fair === 'object') ? state.fair : {}
+  };
+}
+
+async function _encodeMagicLink(payload){
+  const text = JSON.stringify(payload);
+  const raw  = new TextEncoder().encode(text);
+  const gz   = await _maybeGzip(raw);
+  const use  = (gz && gz.length < raw.length) ? { bytes: gz, prefix: 'v1z.' } : { bytes: raw, prefix: 'v1.' };
+  return use.prefix + _bytesToB64Url(use.bytes);
+}
+
+async function _decodeMagicLinkToken(token){
+  let s = String(token||'');
+  const isGz = s.startsWith('v1z.');
+  const okV1 = isGz || s.startsWith('v1.');
+  if (!okV1) throw new Error('Unknown Magic Link format');
+  s = s.replace(/^v1z?\./,'');
+  let bytes = _b64UrlToBytes(s);
+  if (isGz){
+    const ungz = await _maybeGunzip(bytes);
+    if (ungz) bytes = ungz; // fall back to raw if ungzip unsupported
+  }
+  const json = new TextDecoder().decode(bytes);
+  return JSON.parse(json || '{}');
+}
+
+function _baseURL(){
+  const u = new URL(location.href);
+  return u.origin + u.pathname;
+}
+
+function _baseURL(){
+  const u = new URL(location.href);
+  return u.origin + u.pathname;
+}
+
+function _baseURL(){
+  const u = new URL(location.href);
+  return u.origin + u.pathname;
+}
+
+async function createMagicLink(){
+  const data  = _magicPayload();                     // collection + fair stats snapshot
+  const token = await _encodeMagicLink(data);        // the compact ml token (starts with v1.)
+  const link  = _baseURL() + '?ml=' + token + '#collection';
+
+  openModal({
+    title: 'Magic Link — Share or move your collection',
+    okText: 'Close',
+    bodyHTML: `
+      <div class="callout" role="note" style="margin-bottom:8px">
+        Opening this on another device will <strong>add missing packs</strong> (no duplicates).
+        All stats are <strong>merged additively</strong>.
+      </div>
+
+      <label class="tiny">Link</label>
+      <input id="mlinkField" type="text" value="${esc(link)}" style="width:100%" readonly>
+
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+        <button class="btn" id="mlCopyBtn"  type="button">Copy Link</button>
+        <button class="btn btn-gray" id="mlShareBtn" type="button">Share…</button>
+        <span class="tiny" id="mlCopyNote" aria-live="polite"></span>
+      </div>
+
+      <hr style="margin:12px 0; opacity:.2">
+
+      <label class="tiny">Token (shorter than full URL)</label>
+      <input id="mlinkTokenField" type="text" value="${esc(token)}" style="width:100%" readonly>
+
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+        <button class="btn btn-gray" id="mlCopyTokenBtn" type="button">Copy Token</button>
+        <span class="tiny" id="mlCopyTokenNote" aria-live="polite"></span>
+      </div>
+
+      <div class="tiny" style="margin-top:8px; opacity:.8">
+        Tip: Tokens work with <em>Paste Magic Link</em>.
+      </div>
+    `,
+    onOpen(){
+      const fLink   = $('mlinkField');
+      const fToken  = $('mlinkTokenField');
+      const bCopy   = $('mlCopyBtn');
+      const bShare  = $('mlShareBtn');
+      const bTok    = $('mlCopyTokenBtn');
+      const note    = $('mlCopyNote');
+      const tokNote = $('mlCopyTokenNote');
+
+      if (fLink){ fLink.focus(); fLink.select(); }
+
+      if (bCopy){
+        bCopy.onclick = async ()=>{
+          try{
+            await navigator.clipboard.writeText(link);
+            if (note) note.textContent = 'Copied ✔';
+          }catch{
+            if (note) note.textContent = 'Press Ctrl/Cmd+C to copy';
+            if (fLink){ fLink.focus(); fLink.select(); }
+          }
+        };
+      }
+
+      if (bShare){
+        if (navigator.share){
+          bShare.onclick = async ()=>{
+            try{
+              await navigator.share({
+                title: 'Hydra Jump Bot — Magic Link',
+                text: 'Use this Magic Link to add my packs & fair stats:',
+                url: link
+              });
+              if (note) note.textContent = 'Shared ✔';
+            }catch(_){ /* user canceled */ }
+          };
+        } else {
+          bShare.style.display = 'none';
+        }
+      }
+
+      if (bTok){
+        bTok.onclick = async ()=>{
+          try{
+            await navigator.clipboard.writeText(token);
+            if (tokNote) tokNote.textContent = 'Token copied ✔';
+          }catch{
+            if (tokNote) tokNote.textContent = 'Press Ctrl/Cmd+C to copy';
+            if (fToken){ fToken.focus(); fToken.select(); }
+          }
+        };
+      }
+    }
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+// Extracts the ml token whether the user pastes a full URL or just the token
+function _extractMagicToken(text){
+  const raw = String(text||'').trim();
+  if (!raw) return '';
+  // Try URL first
+  try {
+    const u = new URL(raw);
+    const t = u.searchParams.get('ml');
+    if (t) return t;
+  } catch(_) {}
+  // Try query-like fragments
+  const m = raw.match(/(?:[?&#]ml=)([A-Za-z0-9._-]+)/i);
+  if (m && m[1]) return m[1];
+  // Otherwise assume they pasted the token itself
+  return raw.split(/\s/)[0];
+}
+
+// UI to paste a Magic Link / token and MERGE it into current device
+async function openPasteMagicLink(){
+  openModal({
+    title: 'Import from Magic Link',
+    okText: 'Merge Now',
+    bodyHTML: `
+      <label class="tiny">Paste link or token</label>
+      <textarea id="pasteMagicField" rows="3" style="width:100%" placeholder="Paste a Magic Link URL or the token (starts with v1.)"></textarea>
+      <div class="tiny" style="margin-top:8px; opacity:.8">
+        This will <strong>add missing packs</strong> only (no duplicates).
+        Fair stats will be <strong>merged additively</strong>.
+      </div>
+    `,
+    async onOK(){
+      const t = _extractMagicToken(($('pasteMagicField')?.value)||'');
+      if (!t){ alert('Please paste a Magic Link URL or token.'); return; }
+
+      let data;
+      try {
+        data = await _decodeMagicLinkToken(t);
+      } catch (err){
+        alert('Magic Link error: ' + (err?.message || err));
+        return;
+      }
+
+      // Merge collection (ADD-ONLY)
+      const incoming = Array.isArray(data?.collection) ? data.collection : [];
+      const c = mergeCollectionsAddOnly(state.collection, incoming);
+
+      // Merge fair stats additively (enabled below)
+      if (ALLOW_FAIR_MERGE) {
+        const f = mergeFairAdditive(state.fair, data?.fair);
+        state.fair = f.merged;
+      }
+
+      state.collection = c.merged;
+      saveAll();
+      resetSession();
+      alert(`Merge complete: +${c.added} added, ${c.skipped} duplicate${c.skipped===1?'':'s'} skipped.`);
+    }
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// === Magic Link: auto-MERGE on visit ========================================
+async function checkForMagicLinkInURL(){
+  const params = new URLSearchParams(location.search);
+  const token  = params.get('ml');
+  if (!token) return;
+
+  // Decode payload
+  let data = null;
+  try {
+    data = await _decodeMagicLinkToken(token);
+  } catch (err){
+    alert('Magic Link error: ' + (err?.message || err));
+    // Clean token so it doesn't keep trying
+    const u = new URL(location.href); u.searchParams.delete('ml');
+    history.replaceState(null, '', u.toString());
+    return;
+  }
+
+  // Merge collection: ADD only
+  const incoming = Array.isArray(data?.collection) ? data.collection : [];
+  const c = mergeCollectionsAddOnly(state.collection, incoming);
+
+  // Fair stats: preserve by default; optionally additive merge
+  if (ALLOW_FAIR_MERGE) {
+    const f = mergeFairAdditive(state.fair, data?.fair);
+    state.fair = f.merged;
+  }
+  // If not merging fair, leave state.fair unchanged.
+
+  // Commit + clean URL + refresh UI
+  state.collection = c.merged;
+  saveAll();
+  resetSession(); // if your app re-reads state on session reset
+  const u = new URL(location.href); u.searchParams.delete('ml');
+  history.replaceState(null, '', u.toString());
+
+  // Friendly summary
+  alert(`Magic Link imported via MERGE:\n+${c.added} new pack${c.added===1?'':'s'} added, ${c.skipped} duplicate${c.skipped===1?'':'s'} skipped.`);
+}
+
+
+
+/* ───────────────────────────────────────────────────────────
+ * Magic Link — MERGE helpers
+ * - We only ADD missing collection items.
+ * - Fair stats are preserved by default (no changes).
+ *   Toggle ALLOW_FAIR_MERGE to true if you ever want additive merging.
+ * ─────────────────────────────────────────────────────────── */
+const ALLOW_FAIR_MERGE = true;
+
+// Canonical slug (folds accents, strips punctuation/whitespace, lowercases)
+function _slug(s){
+  return String(s||'')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'');
+}
+
+// Colors normalized to WUBRG(C) order, duplicates removed
+const _WUBRG_ORDER = { W:0, U:1, B:2, R:3, G:4, C:5 };
+function _canonColors(arr){
+  const uniq = Array.from(new Set((Array.isArray(arr)?arr:[]).map(c=>String(c||'').toUpperCase())));
+  return uniq
+    .filter(c => c in _WUBRG_ORDER)
+    .sort((a,b)=>_WUBRG_ORDER[a]-_WUBRG_ORDER[b])
+    .join('');
+}
+
+// Stronger cross-device identity for collections
+function _itemKey(x){
+  if (!x || typeof x !== 'object') return JSON.stringify(x);
+  const name = _slug(x.name);
+  const set  = _slug(x.set || 'Unlabeled');
+  const cols = _canonColors(x.colors || []);
+  if (name && set && cols) return `${name}|${set}|${cols}`;
+  // fallback (should rarely be needed)
+  return x.id || x.packId || x.code || x.name || JSON.stringify(x);
+}
+
+
+function mergeCollectionsAddOnly(localArr, incomingArr){
+  const base = Array.isArray(localArr) ? localArr : [];
+  const inc  = Array.isArray(incomingArr) ? incomingArr : [];
+  const seen = new Set(base.map(_itemKey));
+  const out  = base.slice();
+  let added = 0, skipped = 0;
+
+  for (const it of inc){
+    const k = _itemKey(it);
+    if (seen.has(k)) { skipped++; continue; }
+    seen.add(k);
+    out.push(it);
+    added++;
+  }
+  return { merged: out, added, skipped };
+}
+
+function mergeFairAdditive(localFair, incomingFair){
+  // Only used if ALLOW_FAIR_MERGE === true
+  const out = { ...(localFair && typeof localFair === 'object' ? localFair : {}) };
+  const src = (incomingFair && typeof incomingFair === 'object') ? incomingFair : {};
+  let newKeys = 0, updated = 0;
+
+  const isPlain = v => v && typeof v === 'object' && !Array.isArray(v);
+  for (const k of Object.keys(src)){
+    const a = out[k], b = src[k];
+    if (typeof a === 'number' && typeof b === 'number'){ out[k] = a + b; updated++; continue; }
+    if (isPlain(a) && isPlain(b)){
+      const m = { ...a };
+      for (const sk of Object.keys(b)){
+        if (typeof a[sk] === 'number' && typeof b[sk] === 'number'){ m[sk] = a[sk] + b[sk]; updated++; }
+        else if (!(sk in m)){ m[sk] = b[sk]; newKeys++; }
+      }
+      out[k] = m; continue;
+    }
+    if (!(k in out)) { out[k] = b; newKeys++; }
+    // else: keep local as-is (preserve)
+  }
+  return { merged: out, newKeys, updated };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -582,7 +1130,7 @@ function incPick(p){
 // [UTIL] colorTypeRank(p) — sort helper by color count
 function colorTypeRank(p){return p.colors.length;}
 // [UTIL] WUBRG ordering for 'color' sort (W,U,B,R,G; colorless last)
-const WUBRG_INDEX = { W:0, U:1, B:2, R:3, G:4 };
+const WUBRG_INDEX = { W:0, U:1, B:2, R:3, G:4, C:5 };
 
 function colorKeyWUBRG(p){
   const cols = Array.isArray(p.colors) ? p.colors : [];
@@ -677,6 +1225,1046 @@ function packRowHtml(p, settings = state.settingsCollection){
     </div>
   </div>`;
 }
+
+
+function slug(s){
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+}
+
+// Try multiple sources for the image; fallback to a guessed path in /img
+function officialImageUrl(p) {
+  if (p && p.image) return p.image;
+  if (p && p.face)  return p.face;
+  if (typeof OFFICIAL_IMAGE_MAP !== 'undefined') {
+    const hit = OFFICIAL_IMAGE_MAP[p.id] || OFFICIAL_IMAGE_MAP[p.name];
+    if (hit) return hit;
+  }
+
+  // 1) Slug helpers
+  const slug = (s) => String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  const setSlug  = slug(p?.set);
+  const nameSlug = slug(p?.name);
+  const idSlug   = slug(p?.id);
+
+  // 2) Base-name heuristic (strip trailing numbers / roman numerals)
+  // heroes-1, heroes-12, heroes-iv, heroes-xvi -> heroes
+  const baseNameSlug = nameSlug.replace(/-(?:\d+|[ivxlcdm]+)$/i, '');
+
+  // 3) Candidate order
+  // Prefer SET+base, then base-only, then SET+full, then full, then id.
+  const tries = [];
+  if (setSlug && baseNameSlug)                  tries.push(`${setSlug}-${baseNameSlug}.jpg`);
+  if (baseNameSlug)                              tries.push(`${baseNameSlug}.jpg`);
+  if (setSlug && nameSlug !== baseNameSlug && nameSlug)
+                                                tries.push(`${setSlug}-${nameSlug}.jpg`);
+  if (nameSlug && nameSlug !== baseNameSlug)     tries.push(`${nameSlug}.jpg`);
+  if (idSlug)                                    tries.push(`${idSlug}.jpg`);
+
+  // 4) Return first guess (cannot check existence reliably under file://)
+  return tries.length ? `img/${tries[0]}` : '';
+}
+
+
+// [OFFICIAL] view state (filters)
+if (!state.official) state.official = { 
+  search:'', 
+  colorFilter:[], 
+  colorMode: 'any',
+  setFilter:[],
+  kind: 'ALL', 
+  page:1, 
+  pageSize:24 };
+
+
+
+// [OFFICIAL] — Global page-size handler (robust against duplicate renders)
+// Ensures the "Page size" select always re-renders the grid.
+if (!window.__OFFICIAL_SIZE_WIRED__) {
+  window.__OFFICIAL_SIZE_WIRED__ = true;
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.id === 'officialPageSize') {
+      const n = parseInt(t.value, 10);
+      if (!state.official) {
+        state.official = { 
+          search:'', 
+          colorFilter:[], 
+          colorMode: 'any',
+          setFilter:[], 
+          kind: 'ALL',
+          page:1, 
+          pageSize:24 };
+      }
+      state.official.pageSize = (Number.isFinite(n) && n > 0) ? n : 24;
+      state.official.page = 1;
+      // Re-render using the current catalog; fall back to full panel if needed.
+      try {
+        renderOfficialGrid(officialFlattened());
+      } catch {
+        renderOfficialPanel();
+      }
+    }
+  });
+}
+
+
+
+
+
+/* [OFFICIAL] helpers — Jumpstart vs Jump In!, placeholder preview, weighted generate*/
+
+const OFFICIAL_LAST_ROLL = new Map(); // key: officialId -> { deck: Card[], chosenBySlot: Map(slot->optionName) }
+
+function officialFlattened(){
+  const cat = (window.OFFICIAL_PACKS || {});
+  const out = [];
+  const norm = (p)=>({
+    id: String(p.id || '').trim(),
+    name: String(p.name || ''),
+    theme: p.theme || null,
+    colors: Array.isArray(p.colors) ? p.colors.slice(0,5) : [],
+    set: p.set || null,
+    tags: Array.isArray(p.tags) ? p.tags.slice() : [],
+    kind: p.kind || null, // 'JUMPSTART' | 'JUMPIN'
+    image: p.image || p.face || p.faceURL || p.faceUrl || null,
+    deck: Array.isArray(p.deck) ? p.deck.map(d => ({
+      name: String(d.name || '').trim(),
+      qty:  Math.max(1, parseInt(d.qty || 1, 10)),
+      type: d.type || '',
+      mana: d.mana || ''
+    })) : [],
+    slots: Array.isArray(p.slots) ? p.slots.map(s => ({
+      slot: s.slot,
+      options: (s.options || []).map(o => ({
+        name: String(o.name || '').trim(),
+        weight: Math.max(1, parseInt(o.weight || 1, 10))
+      }))
+    })) : []
+  });
+(cat.jumpstart || []).forEach(p => out.push({ ...norm(p), source: 'JumpStart', kind: 'JUMPSTART' }));
+(cat.jumpin    || []).forEach(p => out.push({ ...norm(p), source: 'Jump In!',  kind: 'JUMPIN'  }));
+  return out;
+}
+
+
+// ---- Jump In! weighted generator ---------------------------------------
+
+function splitNamesMaybe(nameStr){
+  if (!nameStr) return [];
+  return [String(nameStr).trim()];
+}
+
+function rollWeightedOption(options){
+  const total = options.reduce((s,o)=>s+o.weight,0);
+  let r = Math.random() * total;
+  for (const o of options){
+    if ((r -= o.weight) <= 0) return o;
+  }
+  return options[options.length-1];
+}
+
+function mapCountPush(map, name, qty=1){
+  const k = name.toLowerCase();
+  const prev = map.get(k);
+  if (prev) { prev.qty += qty; } else { map.set(k, { name, qty, type:'', mana:'' }); }
+}
+
+// Return { deck: Card[], chosenBySlot: Map(slot -> optionName) }
+function rollJumpInDeckFromTemplate(p){
+  const optionNameSet = new Set();
+  (p.slots || []).forEach(s => (s.options||[]).forEach(o => optionNameSet.add(String(o.name||'').trim().toLowerCase())));
+
+  const counts = new Map();
+  (p.deck || []).forEach(c=>{
+    if (!optionNameSet.has(String(c.name||'').toLowerCase())) {
+      mapCountPush(counts, c.name, Math.max(1, parseInt(c.qty||1,10)));
+    }
+  });
+
+  const chosenBySlot = new Map();
+  (p.slots || []).forEach((s, idx)=>{
+    const pick = rollWeightedOption(s.options || []);
+    chosenBySlot.set(String(s.slot), pick.name);
+    const names = splitNamesMaybe(pick.name);
+    names.forEach(n => mapCountPush(counts, n, 1));
+  });
+
+  return { deck: Array.from(counts.values()), chosenBySlot };
+}
+
+// ---- Preview helpers ----------------------------------------------------
+
+// Build placeholder deck: fixed cards + "Random 1", "Random 2", so on
+function buildPlaceholderDeck(p){
+  const optionNameSet = new Set();
+  (p.slots || []).forEach(s => (s.options||[]).forEach(o => optionNameSet.add(String(o.name||'').trim().toLowerCase())));
+
+  const list = [];
+  // fixed cards first
+  (p.deck || []).forEach(c=>{
+    if (!optionNameSet.has(String(c.name||'').toLowerCase())) {
+      list.push({ name: c.name, qty: Math.max(1, parseInt(c.qty||1,10)) });
+    }
+  });
+  // then placeholder rows in slot order
+  (p.slots || []).slice().sort((a,b)=>String(a.slot).localeCompare(String(b.slot))).forEach((s, i)=>{
+    list.push({ name: `Random ${i+1}`, qty: 1 });
+  });
+  return list;
+}
+
+// Simple deck list: "qty × name", no type grouping (NEED TO UPDATE TO MAKE IT LOOK NICE)
+function renderSimpleDeckList(deck){
+  const rows = deck.map(d => `<li>${Math.max(1,parseInt(d.qty||1,10))} × ${esc(d.name)}</li>`).join('');
+  return `<div class="decklist"><ul style="margin:0;padding-left:18px">${rows}</ul></div>`;
+}
+
+// Slots table: rows = one per option; columns: Slot | Option | %
+function slotsTableHTML(p /*, chosenBySlot (ignored here) */){
+  if (!Array.isArray(p.slots) || !p.slots.length) {
+    return `<div class="hint">No slots found for this template.</div>`;
+  }
+  const row = (s)=>{
+    const total = (s.options||[]).reduce((a,b)=>a + (b.weight||0), 0) || 1;
+    const optsInline = (s.options||[]).map(o=>{
+      const pct = Math.round((o.weight/total)*100);
+      return `${esc(o.name)} ${pct}%`;
+    }).join(' — ');
+    return `<tr>
+      <td style="white-space:nowrap">Slot ${esc(String(s.slot))}</td>
+      <td>${optsInline}</td>
+    </tr>`;
+  };
+  const rows = (p.slots||[]).slice().sort((a,b)=>String(a.slot).localeCompare(String(b.slot))).map(row).join('');
+  return `<table class="table slim"><thead><tr><th>Slot</th><th>Options</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+
+
+// ─────────────────────────────────────────────────────────────
+// [OFFICIAL] Image Carousel Banner
+// Items: { text, set?, kind?('JUMPSTART'|'JUMPIN'|'ALL'), bg? }
+// Click: applies kind + set filters and opens page 1.
+// ─────────────────────────────────────────────────────────────
+function renderOfficialBanner(all){
+  const host   = $('officialBanner');
+  const slides = $('officialBannerSlides');
+  const dots   = $('officialBannerDots');
+  const prev   = $('officialBannerPrev');
+  const next   = $('officialBannerNext');
+  const notes  = $('officialNewsNotes'); // old note; we hide it if present
+  if (!host || !slides) return;
+
+  // Build items
+  let items = Array.isArray(window.OFFICIAL_BANNER) ? window.OFFICIAL_BANNER.slice() : null;
+  if (!items || !items.length){
+    // sensible defaults
+    const byKind = { JUMPSTART: new Set(), JUMPIN: new Set() };
+    for (const p of all){
+      const k = String(p.kind || '').toUpperCase() === 'JUMPIN' ? 'JUMPIN' : 'JUMPSTART';
+      byKind[k].add(p.set || 'Unlabeled');
+    }
+    const js = [...byKind.JUMPSTART].sort();
+    const ji = [...byKind.JUMPIN].sort();
+    items = [];
+    if (js[0]) items.push({ text:`JumpStart spotlight — ${js[0]}`, kind:'JUMPSTART', set:js[0] });
+    if (ji[0]) items.push({ text:`Jump In! spotlight — ${ji[0]}`,   kind:'JUMPIN',    set:ji[0] });
+    if (!items.length) items.push({ text:'Explore Official packs — click to filter', kind:'ALL' });
+  }
+
+  // Render slides
+const mkSlide = (it, idx) => {
+  const t   = String(it.text || 'Update').trim();
+  const set = it.set ? ` data-set="${esc(it.set)}"` : '';
+  const kind= it.kind ? ` data-kind="${String(it.kind).toUpperCase()}"` : '';
+  const bg  = it.bg   ? ` style="background-image:url('${esc(it.bg)}')"` : '';
+  const tagK= it.kind ? `<span class="tag">${it.kind==='JUMPIN'?'Jump In!':(it.kind==='JUMPSTART'?'JumpStart':'All')}</span>` : '';
+  const tagS= it.set  ? `<span class="tag">${esc(it.set)}</span>` : '';
+  // NOTE: slides start inert & unfocusable; the active one will be flipped later
+  return `
+    <a href="#" class="slide" role="group" aria-roledescription="slide"
+       aria-label="Slide ${idx+1}" aria-hidden="true" tabindex="-1"${set}${kind}${bg}>
+      <div class="banner-content">
+        <div class="tags">${tagK}${tagS}</div>
+        <div class="banner-title">${esc(t)}</div>
+      </div>
+    </a>`;
+};
+
+
+  slides.innerHTML = items.map(mkSlide).join('');
+
+  if (dots){
+    dots.innerHTML = items.length > 1
+      ? items.map((_,i)=>`<button type="button" role="tab" aria-label="Go to slide ${i+1}" data-ix="${i}" aria-selected="false"></button>`).join('')
+      : '';
+  }
+
+  // Hide legacy note
+  if (notes) notes.style.display = 'none';
+
+  // State + helpers
+  const st = state.official || (state.official = { search:'', colorFilter:[], colorMode:'any', setFilter:[], kind:'ALL', page:1, pageSize:24 });
+  let ix = Math.min(st.bannerIndex || 0, Math.max(0, items.length-1));
+  let timer = host.__timer;
+  const SLIDE_MS = 6000;
+
+  const $slides = Array.from(slides.querySelectorAll('.slide'));
+  const $dots   = Array.from(dots ? dots.querySelectorAll('button[data-ix]') : []);
+
+const applyActive = () => {
+  let needFocusMove = false;
+  const focused = document.activeElement;
+  if (focused) {
+    const focSlide = focused.closest && focused.closest('.slide');
+    if (focSlide && focSlide !== $slides[ix]) {
+      needFocusMove = true;
+    }
+  }
+
+  $slides.forEach((el, i) => {
+    const active = (i === ix);
+    el.classList.toggle('active', active);
+
+    el.setAttribute('aria-hidden', active ? 'false' : 'true');
+    if (active) {
+      el.removeAttribute('inert');
+      el.setAttribute('tabindex', '0');
+    } else {
+      el.setAttribute('inert', '');
+      el.setAttribute('tabindex', '-1');
+    }
+  });
+
+  $dots.forEach((d, i) => d.setAttribute('aria-selected', i === ix ? 'true' : 'false'));
+
+  if (needFocusMove) {
+    $slides[ix].focus({ preventScroll: true });
+  }
+
+  st.bannerIndex = ix;
+};
+
+
+  const go = (to) => {
+    const n = items.length;
+    if (!n) return;
+    ix = ((to % n) + n) % n;
+    applyActive();
+  };
+
+  const nextSlide = () => go(ix + 1);
+  const prevSlide = () => go(ix - 1);
+
+  const start = () => {
+    stop();
+    if (items.length > 1) timer = host.__timer = setInterval(nextSlide, SLIDE_MS);
+  };
+  const stop = () => {
+    if (timer){ clearInterval(timer); host.__timer = null; timer = null; }
+  };
+
+slides.addEventListener('click', (e)=>{
+  const el = e.target.closest('.slide.active'); // only active slide is actionable
+  if (!el) return;
+  e.preventDefault();
+  const kind = String(el.getAttribute('data-kind')||'').toUpperCase();
+  const set  = el.getAttribute('data-set') || '';
+  if (kind === 'JUMPSTART' || kind === 'JUMPIN') st.kind = kind; else st.kind = 'ALL';
+  st.setFilter = set ? [set] : [];
+  st.page = 1;
+  renderOfficialFilters(all);
+  renderOfficialGrid(all);
+});
+
+
+  if (prev) prev.onclick = (e)=>{ e.preventDefault(); stop(); prevSlide(); start(); };
+  if (next) next.onclick = (e)=>{ e.preventDefault(); stop(); nextSlide(); start(); };
+
+  if (dots){
+    dots.onclick = (e)=>{
+      const b = e.target.closest('button[data-ix]'); if (!b) return;
+      stop(); go(parseInt(b.getAttribute('data-ix'),10)); start();
+    };
+  }
+
+  host.addEventListener('mouseenter', stop);
+  host.addEventListener('mouseleave', start);
+
+  // Init
+  go(ix);
+  start();
+}
+
+
+
+// ───────────────────────────────────────────────────────────
+// [OFFICIAL] v2 — News + Filters + Grid + Pagination
+// ───────────────────────────────────────────────────────────
+function renderOfficialPanel(){
+  const newsKPI = $('officialNewsKPI');
+  const newsNotes = $('officialNewsNotes');
+  const boxGrid = $('officialGrid');
+  if (!boxGrid) return;
+
+  // 0) Ensure catalog exists
+  const all = officialFlattened(); // {id,name,theme,colors[],set,tags[],kind,deck,slots,image,source}
+  if (!Array.isArray(all) || !all.length){
+    boxGrid.innerHTML = `<div class="hint">Failed to load official catalog.</div>`;
+    if (newsKPI) newsKPI.innerHTML = '';
+    return;
+  }
+
+  // 1) KPIs top zone
+  const totalJS = all.filter(x => x.source === 'JumpStart').length;
+  const totalJI = all.filter(x => x.source === 'Jump In!').length;
+  if (newsKPI){
+    newsKPI.innerHTML = [
+      `<div class="kpi"><div class="label">Jumpstart</div><div class="value">${totalJS}</div></div>`,
+      `<div class="kpi"><div class="label">Jump In!</div><div class="value">${totalJI}</div></div>`,
+      `<div class="kpi"><div class="label">Total</div><div class="value">${all.length}</div></div>`
+    ].join('');
+  }
+  // rolling banner
+renderOfficialBanner(all);
+
+// Remove old filler - kept for legacy fallbacks)
+  if (newsNotes && newsNotes.dataset && !newsNotes.dataset.bannerDone){
+    newsNotes.innerHTML = '';
+    newsNotes.dataset.bannerDone = '1';
+  }
+
+  // 2) Filters plus search
+  renderOfficialFilters(all);
+
+
+  // 3) Grid (applies filters and paging)
+  renderOfficialGrid();
+}
+
+
+// Build format (kind) chips, split set lists, color chips, search, and wire events
+function renderOfficialFilters(all){
+  // Ensure state exists
+  const st = state.official || (state.official = { search:'', colorFilter:[], colorMode: 'any', setFilter:[], kind:'ALL', page:1, pageSize:24 });
+
+  // DOM targets
+  const kindBox   = $('officialKindBox');  
+  const setsJSBox = $('officialSetListJS');
+  const setsJIBox = $('officialSetListJI');
+  const clrBox    = $('officialColorBox');
+  const search    = $('officialSearchInput');
+  const clearSets = $('officialSetClear');
+  const selPage   = $('officialPageSize');
+  const colorModeSel = $('officialColorMode');
+
+
+// Show/hide the two set wrappers based on current format (st.kind)
+const updateSetWrapVisibility = () => {
+  const wrapJS = $('officialSetWrapJS') || null;
+  const wrapJI = $('officialSetWrapJI') || null;
+
+  const k = String(st.kind || 'ALL').toUpperCase();
+  const showJS = (k === 'ALL' || k === 'JUMPSTART');
+  const showJI = (k === 'ALL' || k === 'JUMPIN');
+
+  if (wrapJS) wrapJS.classList.toggle('is-hidden', !showJS);
+  if (wrapJI) wrapJI.classList.toggle('is-hidden', !showJI);
+};
+
+
+
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 1) Format (kind) chips — All / JumpStart / Jump In!
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (kindBox && !kindBox.__rendered) {
+    const KINDS = [
+      { key:'ALL',       label:'All' },
+      { key:'JUMPSTART', label:'JumpStart' },
+      { key:'JUMPIN',    label:'Jump In!' }
+    ];
+    kindBox.classList.add('set-grid');
+    kindBox.innerHTML = KINDS.map(k=>{
+      const on = (st.kind === k.key);
+      return `<div role="button" tabindex="0"
+                   class="set-chip kind ${on?'active':''}"
+                   data-kind="${k.key}" aria-pressed="${on?'true':'false'}">
+                <span class="name">${k.label}</span>
+              </div>`;
+    }).join('');
+
+const setKind = (key)=>{
+  if (!key) return;
+  st.kind = key;
+  st.page = 1;
+
+  // Update to chip visuals
+  if (kindBox) {
+    kindBox.querySelectorAll('.set-chip').forEach(ch=>{
+      const on = (ch.dataset.kind === key);
+      ch.classList.toggle('active', on);
+      ch.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  // hide/show the set sections
+  updateSetWrapVisibility();
+
+  renderOfficialGrid();
+};
+
+    if (!kindBox.__bound) {
+      kindBox.addEventListener('click', e=>{
+        const el = e.target.closest('.set-chip');
+        if (el) setKind(el.dataset.kind);
+      });
+      kindBox.addEventListener('keydown', e=>{
+        if ((e.key === ' ' || e.key === 'Enter')) {
+          const el = e.target.closest('.set-chip');
+          if (el) { e.preventDefault(); setKind(el.dataset.kind); }
+        }
+      });
+      kindBox.__bound = true;
+    }
+    kindBox.__rendered = true;
+  }
+
+  // Gather sets per kind
+const setsJS = Array.from(new Set(
+  all.filter(p => String(p.kind||'').toUpperCase() === 'JUMPSTART')
+     .map(p => p.set || 'Unlabeled')
+)).sort((a,b)=>a.localeCompare(b));
+
+const setsJI = Array.from(new Set(
+  all.filter(p => String(p.kind||'').toUpperCase() === 'JUMPIN')
+     .map(p => p.set || 'Unlabeled')
+)).sort((a,b)=>a.localeCompare(b));
+
+  // Helper to paint a set list box
+  const paintSetBox = (box, sets) => {
+    if (!box || box.__rendered) return;
+    box.classList.add('set-grid');
+    box.innerHTML = (sets.length ? sets.map(s=>{
+      const on = st.setFilter.includes(s);
+      return `<div role="button" tabindex="0"
+                   class="set-chip set ${on?'active':''}"
+                   data-set="${esc(s)}" aria-pressed="${on?'true':'false'}">
+                <span class="name">${esc(s)}</span>
+              </div>`;
+    }).join('') : `<div class="tiny">No sets detected.</div>`);
+
+    const toggleSet = (el) => {
+      const key = el?.dataset?.set; if (!key) return;
+      const on = st.setFilter.includes(key);
+      if (on) {
+        st.setFilter = st.setFilter.filter(x => x !== key);
+        el.classList.remove('active'); el.setAttribute('aria-pressed','false');
+      } else {
+        st.setFilter.push(key);
+        el.classList.add('active'); el.setAttribute('aria-pressed','true');
+      }
+      st.page = 1;
+      renderOfficialGrid();
+    };
+
+    if (!box.__bound) {
+      box.addEventListener('click', e=>{
+        const el = e.target.closest('.set-chip');
+        if (el) toggleSet(el);
+      });
+      box.addEventListener('keydown', e=>{
+        if (e.key === ' ' || e.key === 'Enter') {
+          const el = e.target.closest('.set-chip');
+          if (el) { e.preventDefault(); toggleSet(el); }
+        }
+      });
+      box.__bound = true;
+    }
+    box.__rendered = true;
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2) Split set lists — JumpStart / Jump In!
+  // ─────────────────────────────────────────────────────────────────────────────
+  paintSetBox(setsJSBox, setsJS);
+  paintSetBox(setsJIBox, setsJI);
+  
+  updateSetWrapVisibility();
+
+  // Clear Sets button
+  if (clearSets && !clearSets.__bound) {
+    clearSets.addEventListener('click', ()=>{
+      st.setFilter = [];
+      st.page = 1;
+      // Visually clear both lists
+      [setsJSBox, setsJIBox].forEach(b=>{
+        if (!b) return;
+        b.querySelectorAll('.set-chip.active').forEach(el=>{
+          el.classList.remove('active');
+          el.setAttribute('aria-pressed','false');
+        });
+      });
+      renderOfficialGrid();
+    });
+    clearSets.__bound = true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3) Color chips
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (clrBox && !clrBox.__rendered){
+    const COLORS = ['W','U','B','R','G','C'];
+    clrBox.classList.add('set-grid');
+    clrBox.innerHTML = COLORS.map(c=>{
+      const on = st.colorFilter.includes(c);
+      return `<div role="button" tabindex="0"
+                   class="set-chip color ${on?'active':''}"
+                   data-color="${c}" aria-pressed="${on?'true':'false'}">
+                <span class="name">${c}</span>
+              </div>`;
+    }).join('');
+
+    const toggleColor = (el)=>{
+      const key = el?.dataset?.color; if(!key) return;
+      const on = st.colorFilter.includes(key);
+      if (on) {
+        st.colorFilter = st.colorFilter.filter(x => x !== key);
+        el.classList.remove('active'); el.setAttribute('aria-pressed','false');
+      } else {
+        st.colorFilter.push(key);
+        el.classList.add('active'); el.setAttribute('aria-pressed','true');
+      }
+      st.page = 1;
+      renderOfficialGrid();
+    };
+
+    if (!clrBox.__bound){
+      clrBox.addEventListener('click', e=>{
+        const el = e.target.closest('.set-chip');
+        if (el) toggleColor(el);
+      });
+      clrBox.addEventListener('keydown', e=>{
+        if (e.key === ' ' || e.key === 'Enter'){
+          const el = e.target.closest('.set-chip');
+          if (el){ e.preventDefault(); toggleColor(el); }
+        }
+      });
+      // Clear colors button (if present)
+      const clr = $('officialClrClear');
+      if (clr && !clr.__bound){
+        clr.addEventListener('click', ()=>{
+          st.colorFilter = [];
+          st.page = 1;
+          clrBox.querySelectorAll('.set-chip.active').forEach(el=>{
+            el.classList.remove('active');
+            el.setAttribute('aria-pressed','false');
+          });
+          renderOfficialGrid();
+        });
+        clr.__bound = true;
+      }
+      clrBox.__bound = true;
+    }
+    clrBox.__rendered = true;
+  }
+
+  // Color mode (Any / All / Exact) for Official
+if (colorModeSel && !colorModeSel.__bound) {
+  colorModeSel.value = st.colorMode || 'any';
+  colorModeSel.addEventListener('change', ()=>{
+    st.colorMode = colorModeSel.value || 'any';
+    st.page = 1;
+    renderOfficialGrid();
+  });
+  colorModeSel.__bound = true;
+}
+
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4) Search plus dat page size
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (search && !search.__bound){
+    search.value = st.search || '';
+    search.addEventListener('input', ()=>{
+      st.search = search.value || '';
+      st.page = 1;
+      renderOfficialGrid();
+    });
+    search.__bound = true;
+  }
+
+  if (selPage && !selPage.__bound){
+    selPage.value = String(st.pageSize || 24);
+    selPage.addEventListener('change', ()=>{
+      const n = parseInt(selPage.value, 10);
+      st.pageSize = isNaN(n) ? 24 : Math.max(1, n);
+      st.page = 1;
+      renderOfficialGrid();
+    });
+    selPage.__bound = true;
+  }
+}
+
+
+// Apply filters and render card grid
+function renderOfficialGrid(/*allIgnored*/) {
+  const st = state.official || (state.official = {
+    search:'', colorFilter:[], colorMode: 'any', setFilter:[], kind: 'ALL', page:1, pageSize:24
+  });
+
+  // Always pull from live catalog
+  const all = officialFlattened();
+
+  // Prefer the new grid; fall back to the legacy list container if present.
+  const boxGrid = $('officialGrid') || $('officialList');
+  const info    = $('officialPageInfo');
+  const prev    = $('officialPrev');
+  const next    = $('officialNext');
+
+  if (!boxGrid) {
+    // Gentle hint if neither container exists
+    const gridParent = $('officialCard');
+    if (gridParent) {
+      const body = gridParent.querySelector('.body, .card-body') || gridParent;
+      body.insertAdjacentHTML('beforeend', `<div class="hint">Official grid container not found. Add <code>&lt;div id="officialGrid"&gt;</code> to your HTML or keep using the legacy <code>officialList</code> id.</div>`);
+    }
+    return;
+  }
+
+// 1) Apply filters (kind, set, color, search)
+const picks = all.filter(p => {
+  // Kind filter
+  if (st.kind && st.kind !== 'ALL') {
+    if (String(p.kind || '').toUpperCase() !== st.kind) return false;
+  }
+
+  // Set filter
+  if (Array.isArray(st.setFilter) && st.setFilter.length){
+    const key = p.set || 'Unlabeled';
+    if (!st.setFilter.includes(key)) return false;
+  }
+
+// Color filter (Any / All / Exact)
+if (Array.isArray(st.colorFilter) && st.colorFilter.length){
+  const want = st.colorFilter;
+  const have = p.colors || [];
+  const mode = st.colorMode || 'any';
+
+  if (mode === 'all') {
+    if (!want.every(c => have.includes(c))) return false;
+  } else if (mode === 'exact') {
+    const a = [...have].sort().join('');
+    const b = [...want].sort().join('');
+    if (a !== b) return false;
+  } else { // any
+    if (!want.some(c => have.includes(c))) return false;
+  }
+}
+
+
+  // Search: name / theme / set / #tag
+  if (st.search && st.search.trim()){
+    const q = st.search.trim().toLowerCase();
+    const hay = `${String(p.name||'')} ${String(p.theme||'')} ${String(p.set||'')} ${(p.tags||[]).map(t=>'#'+t).join(' ')}`.toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+
+  return true;
+});
+
+
+  if (!picks.length){
+    boxGrid.innerHTML = `<div class="hint">No results under current filters.</div>`;
+    if (info) info.textContent = '0 of 0';
+    if (prev) prev.disabled = true;
+    if (next) next.disabled = true;
+    return;
+  }
+
+  // 2) Pagination math
+const per        = Math.max(1, parseInt(st.pageSize || 24, 10));
+const total      = picks.length;
+const totalPages = Math.max(1, Math.ceil(total / per));
+st.page          = Math.min(Math.max(1, st.page || 1), totalPages);
+
+// Slice
+const start     = (st.page - 1) * per;
+const end       = Math.min(total, start + per);
+const pageItems = picks.slice(start, end);
+
+  // 3) Render — choose card grid (new) or row list (legacy) based on container id
+  const useRowList = (boxGrid.id !== 'officialGrid');
+  boxGrid.innerHTML = pageItems.map(useRowList ? officialRowHtml : officialCardHtml).join('');
+  bindOfficialList(boxGrid, pageItems);
+
+  // 4) Pager UI
+  if (info) info.textContent = `${total ? start + 1 : 0}–${end} of ${total} (page ${st.page}/${totalPages})`;
+  if (prev) prev.disabled = (st.page <= 1);
+  if (next) next.disabled = (st.page >= totalPages);
+}
+
+
+
+// Individual card for the grid (image if provided, else placeholder)
+function officialCardHtml(p){
+  const tags = Array.isArray(p.tags) ? p.tags : [];
+  const actions = (p.kind === 'JUMPIN')
+    ? [
+        `<button class="btn btn-gray" data-preview="${p.id}">Preview</button>`,
+        `<button class="btn" data-gen="${p.id}">Generate Deck</button>`
+      ].join(' ')
+    : [
+        `<button class="btn btn-gray" data-preview="${p.id}">Preview</button>`,
+        `<button class="btn btn-green" data-import="${p.id}">Import to My Collection</button>`
+      ].join(' ');
+
+  const bg = officialImageUrl(p);
+  const bgStyle = bg ? `style="--bg:url('${bg}')"` : '';
+  const bgClass = bg ? '' : ' noimg';
+
+  return `<article class="off-card" id="off_${p.id}">
+    <div class="imgbg${bgClass}" ${bgStyle}></div>
+    <div class="body">
+      <div class="name">${esc(p.name)}</div>
+      <div class="meta">
+        ${p.theme ? `<span class="theme">${esc(p.theme)}</span>` : ''}
+        ${chips(p.colors)} ${p.kind ? `<span class="tag">${esc(p.kind)}</span>` : ''}
+        ${p.set ? `<span class="tag">${esc(p.set)}</span>` : '<span class="tag">Official</span>'}
+      </div>
+      ${tags.length ? `<div class="meta tags">${tags.map(t=>`<span class="tag">#${esc(t)}</span>`).join(' ')}</div>` : ''}
+    </div>
+    <div class="actions">${actions}</div>
+  </article>`;
+}
+
+
+
+
+/* Import an official pack into the user's collection */
+async function importOfficialPack(p, deckOverride){
+  // Duplicate guard: same name , colors , set
+  const dup = (state.collection || []).some(x =>
+    String(x.name||'').toLowerCase() === String(p.name||'').toLowerCase() &&
+    JSON.stringify(x.colors||[]) === JSON.stringify(p.colors||[]) &&
+    String(x.set||'').toLowerCase() === String(p.set||'').toLowerCase()
+  );
+  if (dup) { alert('That pack (name + colors + set) already exists in your collection.'); return; }
+
+  // Source deck: rolled Jump In! deck or fixed Jumpstart deck
+  const deckSrc = Array.isArray(deckOverride) ? deckOverride
+                 : (p.kind === 'JUMPIN'
+                    ? ((OFFICIAL_LAST_ROLL.get(p.id) || {}).deck || rollJumpInDeckFromTemplate(p).deck)
+                    : p.deck);
+
+  // 1) Try from local meta (OFFICIAL_MIN_META) first
+  let hydrated = hydrateWithLocalMeta(deckSrc);
+
+  // 2) If some entries still lack type/mana and we have Scryfall helper, use them
+  const needsFetch = hydrated.some(row => !(row.type && row.type.length));
+  if (needsFetch && typeof enrichWithScryfallMin === 'function') {
+    try {
+      const fetched = await enrichWithScryfallMin(hydrated);
+      hydrated = fetched.map(row => ({
+        name: row.name,
+        qty: Math.max(1, parseInt(row.qty || 1, 10)),
+        mana: row.mana || '',
+        type: row.type || row.type_line || '',
+        type_line: row.type_line || row.type || ''
+      }));
+    } catch(e) {
+      // Soft-fail, this will keep whatever is from local meta
+      console.warn('[Import] Scryfall enrich failed; saving local-meta only.', e);
+    }
+  }
+
+  const copy = {
+    id: uid(),
+    name: p.name,
+    theme: p.theme || null,
+    colors: (p.colors || []).slice(),
+    set: p.set || null,
+    tags: Array.from(new Set([...(p.tags||[]), 'official'])),
+    deck: hydrated
+  };
+
+  state.collection = (state.collection || []).concat(copy);
+  saveAll(); // <-- the only persistence
+}
+
+
+
+// Fills type/mana from OFFICIAL_MIN_META when available
+function hydrateWithLocalMeta(deck = []) {
+  const META = (window.OFFICIAL_MIN_META || {});
+  return (deck || []).map(d => {
+    const name = String(d.name || '').trim();
+    const m = META[name] || {};
+    const qty = Math.max(1, parseInt(d.qty || 1, 10));
+    const type = d.type || m.type || '';
+    const mana = d.mana || m.mana || '';
+    return { name, qty, mana, type, type_line: d.type_line || type || '' };
+  });
+}
+
+async function importOfficialPack(p, deckOverride){
+  // duplicate guard
+  const dup = (state.collection || []).some(x =>
+    String(x.name||'').toLowerCase() === String(p.name||'').toLowerCase() &&
+    JSON.stringify(x.colors||[]) === JSON.stringify(p.colors||[]) &&
+    String(x.set||'').toLowerCase() === String(p.set||'').toLowerCase()
+  );
+  if (dup) { alert('That pack (name + colors + set) already exists in your collection.'); return; }
+
+  // source deck
+  const deckSrc = Array.isArray(deckOverride) ? deckOverride
+                 : (p.kind === 'JUMPIN'
+                    ? ((OFFICIAL_LAST_ROLL.get(p.id) || {}).deck || rollJumpInDeckFromTemplate(p).deck)
+                    : p.deck);
+
+  // 1) local drink
+  let hydrated = hydrateWithLocalMeta(deckSrc);
+
+  // 2) fallback enrich for any rows still missing type
+  const needsFetch = hydrated.some(row => !(row.type && row.type.length));
+  if (needsFetch && typeof enrichWithScryfallMin === 'function') {
+    try {
+      const fetched = await enrichWithScryfallMin(hydrated);
+      hydrated = fetched.map(row => ({
+        name: row.name,
+        qty: Math.max(1, parseInt(row.qty || 1, 10)),
+        mana: row.mana || '',
+        type: row.type || row.type_line || '',
+        type_line: row.type_line || row.type || ''
+      }));
+    } catch(e) {
+      console.warn('[Import] Scryfall enrich failed; saving local-meta only.', e);
+    }
+  }
+
+  const copy = {
+    id: uid(),
+    name: p.name,
+    theme: p.theme || null,
+    colors: (p.colors || []).slice(),
+    set: p.set || null,
+    tags: Array.from(new Set([...(p.tags||[]), 'official'])),
+    deck: hydrated
+  };
+
+  state.collection = (state.collection || []).concat(copy);
+  saveAll();
+}
+
+
+
+function bindOfficialList(hostEl, items){
+  const byId = new Map(items.map(x => [x.id, x]));
+
+  // PREVIEW
+  hostEl.querySelectorAll('button[data-preview]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const p = byId.get(btn.dataset.preview);
+      if (!p) return;
+
+      if (p.kind === 'JUMPIN'){
+        // No roll: show fixed cards + placeholders "Random N"
+        const placeholder = buildPlaceholderDeck(p);
+        const deckHTML = renderSimpleDeckList(placeholder);
+        const table = slotsTableHTML(p, /*chosenBySlot*/ null);
+
+        openModal({
+          title: `Preview — ${p.name}`,
+          okText: 'Close',
+          bodyHTML: `
+            ${deckHTML}
+            <h4 style="margin-top:12px">Slots & Weights</h4>
+            ${table}
+          `
+        });
+        return;
+      }
+
+// Jumpstart preview — LOCAL meta only (no network)
+const deckLocal = typeof hydrateWithLocalMeta === 'function'
+  ? hydrateWithLocalMeta(p.deck || [])
+  : (p.deck || []);
+
+openModal({
+  title: `Deck — ${p.name} (Official)`,
+  okText: 'Close',
+  bodyHTML: (typeof renderDeckColumnsHTML === 'function')
+    ? renderDeckColumnsHTML(deckLocal)
+    : `<pre>${esc(JSON.stringify(deckLocal, null, 2))}</pre>`
+});
+
+    });
+  });
+
+  // GENERATE (Jump In! only) — rolls concrete deck + allows import
+  hostEl.querySelectorAll('button[data-gen]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+  const p = byId.get(btn.dataset.gen);
+  if (!p) return;
+
+  const roll = rollJumpInDeckFromTemplate(p);
+  OFFICIAL_LAST_ROLL.set(p.id, roll);
+
+const deckLocal = typeof hydrateWithLocalMeta === 'function'
+  ? hydrateWithLocalMeta(roll.deck || [])
+  : (roll.deck || []);
+
+const deckHTML = (typeof renderDeckColumnsHTML === 'function')
+  ? renderDeckColumnsHTML(deckLocal)
+  : `<pre>${esc(JSON.stringify(deckLocal, null, 2))}</pre>`;
+
+
+  openModal({
+    title: `Generated Deck — ${p.name}`,
+    okText: 'Close',
+    bodyHTML: `
+      ${deckHTML}
+      <div style="margin-top:8px">
+        <button class="btn btn-green" id="importGeneratedBtn">Import This Deck</button>
+      </div>
+    `,
+    onOpen(){
+      const imp = document.getElementById('importGeneratedBtn');
+      if (imp){
+imp.addEventListener('click', async ()=>{
+  imp.disabled = true;
+  imp.textContent = 'Importing…';
+  await importOfficialPack(p, roll.deck);
+  imp.textContent = 'Imported';
+});
+
+      }
+    }
+  });
+});
+  });
+
+// IMPORT — only for Jumpstart rows; await so metadata hydrates before saving
+hostEl.querySelectorAll('button[data-import]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const pack = byId.get(btn.dataset.import);
+    if (!pack) return;
+    btn.disabled = true;
+    const prev = btn.textContent;
+    btn.textContent = 'Importing…';
+    await importOfficialPack(pack);   // <-- awaits the async import
+    btn.textContent = 'Imported';
+  });
+});
+
+}
+
+
+
  
   function colorOptions(sel){
     const all=['','W','U','B','R','G','C']; 
@@ -684,7 +2272,6 @@ function packRowHtml(p, settings = state.settingsCollection){
   }
   
 function bindPackRowButtons(){
-// REPLACE the current delete handler inside bindPackRowButtons() with this:
 
 document.querySelectorAll('button[data-del]').forEach((b) => {
   b.addEventListener('click', () => {
@@ -778,7 +2365,7 @@ row.innerHTML = `
 
       <div class="row">
         <div style="flex:1">
-          <div class="tiny mana-label" id="e_hint_${id}">Select 1–3 colors.</div>
+          <div class="tiny mana-label" id="e_hint_${id}">Mana Identity<span class="req">&ast;</span></div>
           <div id="e_grid_${id}" class="mana-grid" role="group" aria-labelledby="e_hint_${id}">
             <button type="button" class="mana-btn c W" data-color="W" aria-pressed="false">W</button>
             <button type="button" class="mana-btn c U" data-color="U" aria-pressed="false">U</button>
@@ -805,8 +2392,6 @@ row.innerHTML = `
   </div>
 </div>
 
-
-
       <div class="row">
 
 <details open>
@@ -821,7 +2406,7 @@ row.innerHTML = `
     </div>
     <div><label>Qty</label><input id="d_qty_${id}" type="number" min="1" step="1" value="1"></div>
     <div><label>Mana Cost</label><input id="d_mana_${id}" type="text" placeholder="e.g., {1}{G}"></div>
-    <div><label>Type Line</label><input id="d_type_${id}" type="text" placeholder="e.g., Creature — Elf Druid"></div>
+    <div><label>Type Line</label><input id="d_type_${id}" type="text" placeholder="e.g., Creature — Hydra Druid"></div>
     <div style="flex:0 0 auto">
       <button class="btn btn-gray" id="d_add_${id}" type="button">Add</button>
     </div>
@@ -830,14 +2415,12 @@ row.innerHTML = `
   <!-- row: bulk paste -->
 <div class="row">
   <div style="flex:0 0 auto">
-    <button class="btn btn-cyan" id="d_bulk_open_${id}" type="button">Bulk Paste…</button>
+    <button class="btn btn-cyan" id="d_bulk_open_${id}" type="button" style="margin-top: 8px;">Bulk Paste &#x21AA;</button>
   </div>
 </div>
 
   <div id="d_list_${id}" class="tiny" style="margin-top:6px"></div>
 </details>
-
-
 
 
       </div>
@@ -913,7 +2496,7 @@ $(`e_tag_add_${id}`)?.addEventListener('click', ()=>{
 row.querySelector(`#d_bulk_open_${id}`)?.addEventListener('click', ()=>{
   openModal({
     title: 'Bulk Paste',
-    okText: 'Parse & Add',
+    okText: 'Add',
     bodyHTML: `
       <div class="tiny" style="margin-bottom:6px">One per line (e.g., “2 Llanowar Elves”, “Lightning Bolt x3”, “Forest”)</div>
       <textarea id="bulk_ta_${id}" rows="10" style="width:100%"></textarea>
@@ -924,7 +2507,7 @@ onOK: async ()=>{
   const items = parseDeckText(ta.value);
   if(!items.length) return;
 
-  const enriched = await withBusy('Attuning mana channels…', () => enrichWithScryfallMin(items));
+  const enriched = await withBusy('Attuning Mana channels', () => enrichWithScryfallMin(items));
 
   // merge into the EDIT DRAFT (no persistence yet)
   const base = (draftPackFor(id)?.deck && Array.isArray(draftPackFor(id).deck))
@@ -975,13 +2558,12 @@ onOK: async ()=>{
     h1.value = colors[0] || '';
     h2.value = colors[1] || '';
     h3.value = colors[2] || '';
-    if(hint){
-      const n = colors.length;
-      hint.textContent = n===0 ? 'Select 1–3 colors.'
-                    : n===1 ? 'Mono color.'
-                    : n===2 ? 'Two-color.'
-                    : 'Tri-color.';
-    }
+if(hint){
+  const n = colors.length;
+  hint.textContent = n===0 ? 'Mana Idenity'
+                : ['','Mono color.','Two-color.','Tri-color.','Four-color.','Five-color.'][n] || `${n}-color.`;
+}
+
   }
 
   // seed with current pack colors
@@ -995,18 +2577,16 @@ onOK: async ()=>{
     const btn = e.target.closest('.mana-btn'); if(!btn) return;
     const isSelected = btn.classList.contains('selected');
     const count = grid.querySelectorAll('.mana-btn.selected').length;
-    if(!isSelected && count >= 3){
-      if(hint) hint.textContent = 'You can select up to 3 colors.';
+    if(!isSelected && count >= 5){
+      if(hint) hint.textContent = 'You can select up to 5 colors.';
       return;
     }
+
     btn.classList.toggle('selected');
     btn.setAttribute('aria-pressed', btn.classList.contains('selected') ? 'true' : 'false');
     syncHidden();
   });
 })();
-
-
-
 
 
 // [UTIL] renderDeckEditor() — inline deck row editor inside the pack row
@@ -1071,13 +2651,13 @@ const it = base[i]; if(!it) return;
       const li = host.querySelector(`li[data-line="${i}"]`);
       if (!li) return;
       li.innerHTML = `
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div class="card-ed" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <label class="tiny">Qty</label>
           <input id="line_qty_${id}_${i}" type="number" min="1" value="${it.qty||1}" style="width:64px">
           <label class="tiny">Name</label>
           <input id="line_name_${id}_${i}" type="text" value="${esc(it.name)}" style="min-width:180px">
           <label class="tiny">Mana</label>
-          <input id="line_mana_${id}_${i}" type="text" value="${esc(it.mana||'')}" placeholder="{G}{G}{1}" style="width:140px">
+          <input id="line_mana_${id}_${i}" type="text" value="${esc(it.mana||'')}" placeholder="{1}{G}{G}" style="width:140px">
           <label class="tiny">Type</label>
           <input id="line_type_${id}_${i}" type="text" value="${esc(it.type||'')}" placeholder="Creature — Hydra" style="min-width:200px">
         </div>
@@ -1171,7 +2751,6 @@ host.querySelectorAll('button[data-del-line]').forEach(b=>{
 }
 
 
-
 // Autocomplete wiring
 const nameInput = $(`d_name_${id}`);
 const sug = $(`d_suggest_${id}`);
@@ -1229,7 +2808,7 @@ sug?.addEventListener('click', (e)=>{
   sug.style.display = 'none'; sug.innerHTML = '';
 });
 
-// click-away to close
+// click away to close
 document.addEventListener('click', (e)=>{
   if(!sug) return;
   if(!e.target.closest(`#d_suggest_${id}`) && !e.target.closest(`#d_name_${id}`)){
@@ -1239,7 +2818,7 @@ document.addEventListener('click', (e)=>{
 
 
 
-// Add card
+// Add  card
 row.querySelector(`#d_add_${id}`)?.addEventListener('click', async ()=>{
   const nameEl = $(`d_name_${id}`);
   const qtyEl  = $(`d_qty_${id}`);
@@ -1288,10 +2867,7 @@ row.querySelector(`#d_add_${id}`)?.addEventListener('click', async ()=>{
 // ───────────────────────────────────────────────────────────
 // 4) UI primitives — modal
 // ───────────────────────────────────────────────────────────
-/*
-* openModal({ title, bodyHTML, okText, onOK, onOpen })
-* Lightweight modal helper. Adds ESC + click-away to close.
-*/
+
 function openModal({
   title='',
   bodyHTML='',
@@ -1409,24 +2985,59 @@ async function enrichWithScryfallMin(items){
 }
 
 
+// Save pack edits (supports 1–5 colors including 'C', works with grid or legacy c1/c2/c3)
+// Save pack edits (supports 1–5 colors including 'C', works with grid or legacy c1/c2/c3)
 function saveInlineEdit(id){
-    const name=$(`e_name_${id}`).value.trim();
-    const theme=$(`e_theme_${id}`).value.trim();
-    const c1=$(`e_c1_${id}`).value, c2=$(`e_c2_${id}`).value, c3=$(`e_c3_${id}`).value;
-    const set=$(`e_set_${id}`).value.trim();
-    if(!name) return alert('Please enter a pack name.');
-    if(!c1) return alert('Please choose at least Color 1.');
-    const colors=Array.from(new Set([c1,c2,c3].filter(Boolean)));
-    if(colors.length<1||colors.length>3) return alert('Packs must have 1 to 3 colors.');
-    const tagsRaw = $(`e_tags_hidden_${id}`)?.value || '[]';
-    let tags = [];
-    try { tags = JSON.parse(tagsRaw); } catch {}
-    if(!Array.isArray(tags)) tags = [];
-    const dup=state.collection.some(p=>p.id!==id&&p.name.toLowerCase()===name.toLowerCase()&&JSON.stringify(p.colors)===JSON.stringify(colors)&&String(p.set||'').toLowerCase()===set.toLowerCase());
-    if(dup) return alert('That pack (name + colors + set) already exists.');
-    const idx=state.collection.findIndex(p=>p.id===id);
-    {
-  // Use deck from draft if present; otherwise keep current deck
+  const name  = $(`e_name_${id}`).value.trim();
+  const theme = $(`e_theme_${id}`).value.trim();
+  const set   = $(`e_set_${id}`).value.trim();
+
+  // Preferred: from the 1–5 color grid (buttons with .mana-btn.selected and data-color)
+  const gridEl = $(`e_grid_${id}`);
+  let colors = [];
+  if (gridEl){
+    colors = Array.from(gridEl.querySelectorAll('.mana-btn.selected')).map(b => b.dataset.color);
+  } else {
+    // Fallback: legacy selects (c1/c2/c3)
+    const c1 = $(`e_c1_${id}`)?.value;
+    const c2 = $(`e_c2_${id}`)?.value;
+    const c3 = $(`e_c3_${id}`)?.value;
+    colors = [c1,c2,c3].filter(Boolean);
+  }
+
+  // Normalize: valid symbols only, dedupe, WUBRG + C order for stable identity
+  const VALID = new Set(['W','U','B','R','G','C']);
+  const WUBRG_ORDER = { W:0, U:1, B:2, R:3, G:4, C:5 };
+  colors = Array.from(new Set(colors.filter(c => VALID.has(String(c)))))
+                .sort((a,b)=>WUBRG_ORDER[a]-WUBRG_ORDER[b]);
+
+  if (!name) return alert('Please enter a pack name.');
+  if (colors.length < 1) return alert('Please choose at least one color.');
+  if (colors.length > 5) return alert('Packs can have at most 5 colors.');
+
+  // Tags (unchanged)
+  const tagsRaw = $(`e_tags_hidden_${id}`)?.value || '[]';
+  let tags = [];
+  try { tags = JSON.parse(tagsRaw); } catch {}
+  if (!Array.isArray(tags)) tags = [];
+
+  // Duplicate check: same name + set + same normalized colors (order-insensitive)
+  const norm = (arr)=>Array.from(new Set((Array.isArray(arr)?arr:[]).filter(c=>VALID.has(c))))
+                           .sort((a,b)=>WUBRG_ORDER[a]-WUBRG_ORDER[b]);
+  const colorsKey = JSON.stringify(colors);
+  const dup = state.collection.some(p => {
+    if (p.id === id) return false;
+    const sameName = String(p.name||'').trim().toLowerCase() === name.toLowerCase();
+    const sameSet  = String(p.set||'').trim().toLowerCase()  === set.toLowerCase();
+    const sameCols = JSON.stringify(norm(p.colors)) === colorsKey;
+    return sameName && sameSet && sameCols;
+  });
+  if (dup) return alert('That pack (name + colors + set) already exists.');
+
+  // Commit: preserve draft deck if present
+  const idx = state.collection.findIndex(p => p.id === id);
+  if (idx === -1) { alert('Could not find this pack in your collection.'); return; }
+
   const draft = draftPackFor(id);
   const deckFromDraft = Array.isArray(draft?.deck)
     ? draft.deck
@@ -1436,7 +3047,7 @@ function saveInlineEdit(id){
     ...state.collection[idx],
     name,
     theme: theme || null,
-    colors,
+    colors,          // now 1–5 symbols (W/U/B/R/G/C), normalized
     set: set || null,
     tags,
     deck: deckFromDraft
@@ -1446,14 +3057,13 @@ function saveInlineEdit(id){
   saveAll();
 }
 
-}
 
 
 
 /*
 * renderCollection()
 * Applies filters/sort/paging from state.settingsCollection and renders #packList.
-* Also updates pagination controls and eligible count.
+* Also updates pagination controls and eligible counting and all
 */
 function renderCollection(){
   const settings = state.settingsCollection;
@@ -1609,24 +3219,44 @@ on(b,'click',(ev)=>{
 
 
 // [UTIL] manaChips() — render mana cost as inline color pips
+// Hybrid-aware mana renderer: {W/U} shows as a half-and-half gradient pip
 function manaChips(mana){
   if(!mana) return '';
+  const HYB_COL = { W:'#efe4a8', U:'#9cc7ff', B:'#cfcfcf', R:'#ff9f90', G:'#aee6b2' };
   const out = [];
-  const re = /\{([^}]+)\}/g; // capture each {...}
+  const re = /\{([^}]+)\}/g;
   let m;
   while((m = re.exec(mana))){
-    const t = String(m[1]).toUpperCase(); // e.g. "2", "R", "W/U"
-    if(/^\d+$/.test(t) || t==='X'){ 
-      out.push(`<span class="c C">${t}</span>`);      // numeric or X -> gray pip with text
-    } else if(['W','U','B','R','G','C'].includes(t)){
-      out.push(`<span class="c ${t}">${t}</span>`);   // normal color pips
-    } else {
-      // hybrids, phyrexian, etc. fallback
+    const t = String(m[1]).toUpperCase(); // "2", "R", "W/U", "2/W", "W/P", etc.
+
+    // Numbers, X, or explicit colorless
+    if(/^\d+$/.test(t) || t === 'X' || t === 'C'){
       out.push(`<span class="c C">${t}</span>`);
+      continue;
     }
+
+    // Simple single-color pip
+    if(['W','U','B','R','G'].includes(t)){
+      out.push(`<span class="c ${t}">${t}</span>`);
+      continue;
+    }
+
+    // Two-color hybrid like W/U, U/B, etc.
+    const mhy = t.match(/^([WUBRG])\/([WUBRG])$/);
+    if(mhy){
+      const a = mhy[1], b = mhy[2];
+      const aCol = HYB_COL[a] || '#bbb';
+      const bCol = HYB_COL[b] || '#888';
+      out.push(`<span class="c hyb" style="--hybA:${aCol};--hybB:${bCol}" title="{${a}/${b}}"></span>`);
+      continue;
+    }
+
+    // Fallback (phyrexian, snow, 2/W, etc.)
+    out.push(`<span class="c C">${t}</span>`);
   }
   return `<span class="colors">${out.join('')}</span>`;
 }
+
 
 /* CSV helpers */
 // [UTIL] toCSV(rows) — export packs (name, theme, colors, set, tags)
@@ -1665,7 +3295,7 @@ out.push({
      id: uid(),
    name,
   theme,
-   colors: colors.filter(c=>['W','U','B','R','G','C'].includes(c)).slice(0,3),
+   colors: colors.filter(c => ['W','U','B','R','G','C'].includes(c)).slice(0,5),
   set,
   tags
  });
@@ -1834,7 +3464,6 @@ function normalizeDeckItem(x){
   const mana = String(x.mana||'').trim();
   const type = String(x.type||'').trim();
 
-  // Single source of truth for the section
   const section = getSection(x.section, type);
 
   return { name, qty, mana, type, section };
@@ -1888,7 +3517,7 @@ function renderNewPackDeck(){
   });
 }
 
-/* ===== Draft history and exports ===== */
+////////////// Draft history and exports ///////////////
 function loadHistory(){
   try{ return JSON.parse(localStorage.getItem(LS_HISTORY)) || []; }
   catch{ return []; }
@@ -2101,7 +3730,7 @@ const ok = setDeckForPackSilent(packId, base);
       return;
     }
 
-// --- Last resort: minimal DOM-only refresh (draft-aware) ---
+// --- Last resort: minimal DOM-only refresh (draft will be aware)
 (function domOnlyRefresh(){
   const host = $(`d_list_${packId}`);
   if (!host) return;
@@ -2216,7 +3845,7 @@ function categorizeTypeLine(typeLine){
   if (/\benchantment\b/.test(t))   return 'Enchantments';
   if (/\bartifact\b/.test(t))      return 'Artifacts';
 
-  // Not part of the requested buckets; we’ll omit these from the render.
+  // Not part of the requested? well omit these from the render.
   return 'Other';
 }
 // =============================================================================
@@ -2227,7 +3856,7 @@ function categorizeTypeLine(typeLine){
 // === Render a deck into 3 columns (Creatures / Non-Creatures / Lands)
 /*
 * renderDeckColumnsHTML(deck)
-* Returns HTML (no bindings) suitable for modal display.
+* Returns HTML suitable for modal display.
 */
 // === Render a deck grouped into 7 categories (hides empty categories) =========
 function renderDeckColumnsHTML(deck = []) {
@@ -2239,7 +3868,7 @@ function renderDeckColumnsHTML(deck = []) {
     if (!name) continue;
 
     const qty  = Math.max(1, parseInt(row.qty || 1, 10));
-    // Prefer Scryfall's type_line if present; fall back to your 'type' field
+    // Prefer Scryfall's type_line if present; fall back to 'type' field
     const typeLine = row.type_line || row.type || '';
 
     const cat = categorizeTypeLine(typeLine);
@@ -2253,7 +3882,7 @@ function renderDeckColumnsHTML(deck = []) {
   // Render one visible section (skip if empty)
   const sectionHTML = (label, arr) => {
     if (!arr.length) return ''; // hide unused categories
-    // Sort inside each category: Name A→Z (lightweight, consistent with your codebase)
+    // Sort inside each category: Name A→Z )
     arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
     const items = arr.map(c => `
@@ -2331,7 +3960,7 @@ const scryfallAutocompleteQueued = (q)=> enqueueScryfall(()=> scryfallAutocomple
 const scryfallNamedExactQueued  = (n)=> enqueueScryfall(()=> scryfallNamedExact(n));
 
 /* ============== Scryfall batch (POST /cards/collection) =======================
-   Up to 75 identifiers per request. We run each POST through existing
+   Up to 75 identifiers per request.
    queue to stay under 10 req/sec, and reuse fetchJSon’s polite retries.
 ============================================================================== */
 
@@ -2496,8 +4125,6 @@ async function fetchJSON(url, label, timeoutOrOpts){
 }
 
 
-
-
 /* Log & Session */
 function log(msg){ const li=document.createElement('li'); li.innerHTML=`<span class="tiny">${esc(msg)}</span>`; $('log').prepend(li); }
 function resetSession(){
@@ -2514,7 +4141,7 @@ function resetSession(){
     if (el) el.innerHTML = '';
   });
 
-  // These elements might not exist if you removed/commented the blocks.
+  // These elements might not exist if  removed/commented the blocks.
   const cf = $('chosenFirstWrap'); if (cf) cf.style.display = 'none';
   const fp = $('finalPairWrap');  if (fp) fp.style.display = 'none';
   const ow = $('overlapWrap');    if (ow) ow.style.display = 'none';
@@ -2530,13 +4157,17 @@ function updateView(){
   $('collectionCard').classList.toggle('hidden', v!=='collection');
   $('playCard').classList.toggle('hidden', v!=='play');
   $('statsCard').classList.toggle('hidden', v!=='stats');
+  $('officialCard').classList.toggle('hidden', v!=='official');
 
   $('btnViewCollection').classList.toggle('active', v==='collection');
   $('btnViewPlay').classList.toggle('active', v==='play');
   $('btnViewStats').classList.toggle('active', v==='stats');
+  $('btnViewOfficial').classList.toggle('active', v==='official');
 
+  // Stats View
   if(v==='stats'){ renderStatsPanel(); return; }
 
+  // Collection View
   if(v==='collection'){
     // render collection chips into collection containers
     renderSetFilter(state.settingsCollection, 'colSetFilterBox');
@@ -2547,6 +4178,76 @@ function updateView(){
     renderCollection();
     return;
   }
+
+// Offical View
+if (v === 'official'){
+  if (typeof window.ensureOfficialLoaded === 'function') {
+    window.ensureOfficialLoaded().then(()=>renderOfficialPanel()).catch(()=>{
+      // Show a friendly message 
+const grid = $('officialGrid');
+if (grid) grid.innerHTML = `<div class="hint">Failed to load official catalog.</div>`;
+    });
+    return; // render will happen above
+  }
+  // Fallback when we directly include official_packs.js
+  renderOfficialPanel();
+  return;
+}
+
+
+
+
+
+
+
+
+
+function getOfficialFiltered(all){
+  const st = state.official || {};
+  const q = (st.search||'').trim().toLowerCase();
+
+  return all.filter(p=>{
+    // Set
+    if (Array.isArray(st.setFilter) && st.setFilter.length){
+      const key = p.set || 'Unlabeled';
+      if (!st.setFilter.includes(key)) return false;
+    }
+    // Colors ANY (WUBRG/C)
+    if (Array.isArray(st.colorFilter) && st.colorFilter.length){
+      const want = st.colorFilter;
+      const have = Array.isArray(p.colors)? p.colors : [];
+      if (!want.some(c => have.includes(c))) return false;
+    }
+    // Search: name/theme/set/tags
+    if (q){
+      const hay = `${String(p.name||'')} ${String(p.theme||'')} ${String(p.set||'')} ${(p.tags||[]).map(t=>'#'+t).join(' ')}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+
+
+// Try multiple sources for the image; fallback to a guessed path in /img
+function officialImageUrl(p){
+  if (window.OFFICIAL_IMAGE_MAP){
+  const u = OFFICIAL_IMAGE_MAP[p.id] || OFFICIAL_IMAGE_MAP[p.name];
+  if (u) return u;
+}
+  if (p.image) return p.image;
+  if (p.face) return p.face;
+  // Heuristics: slug from name or id
+  const slug = (s)=>String(s||'').toLowerCase()
+                  .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  const candidates = [];
+  if (p.name) candidates.push(`img/${slug(p.name)}.jpg`);
+  if (p.id)   candidates.push(`img/${slug(p.id)}.jpg`);
+  if (p.set && p.name) candidates.push(`img/${slug(p.set)}-${slug(p.name)}.jpg`);
+  return candidates[0] || '';
+}
+
+
 
   // play view
   renderSetFilter(state.settingsPlay, 'setFilterBox');
@@ -2712,44 +4413,72 @@ for(const id of Object.keys(state.fair||{})){
 }
 
 
+// [PREF] Restore last viewed panel (if any)
+{
+  const last = localStorage.getItem(LS_VIEW);
+  if (last && ['collection','play','stats','official'].includes(last)) {
+    state.settingsCollection.view = last;
+  }
+}
 
-    // View switch
-on($('btnViewCollection'),'click',()=>{ 
-    state.settingsCollection.view='collection'; 
-    updateView(); 
-  });
+
+
+// View switch
+on($('btnViewCollection'),'click',()=>{
+  state.settingsCollection.view='collection';
+  localStorage.setItem(LS_VIEW, 'collection');
+  updateView();
+});
 on($('btnViewPlay'),'click',()=>{
-    state.settingsCollection.view='play';
-    updateView();
-  });
+  state.settingsCollection.view='play';
+  localStorage.setItem(LS_VIEW, 'play');
+  updateView();
+});
 on($('btnViewStats'),'click',()=>{
-    state.settingsCollection.view='stats';
-    updateView();
-  });
+  state.settingsCollection.view='stats';
+  localStorage.setItem(LS_VIEW, 'stats');
+  updateView();
+});
+on($('btnViewOfficial'),'click',()=>{
+  state.settingsCollection.view='official';
+  localStorage.setItem(LS_VIEW, 'official');
+  updateView();
+});
+// [PREF] Initial render honoring restored last view
+// Runs once on load after wiring the buttons & restoring LS_VIEW.
+updateView();
+
 
 
     // Add/manage packs
- on($('addPackBtn'),'click',()=>{
-  const name=$('packName').value.trim(),
-        theme=$('packTheme').value.trim(),
-        c1=$('color1').value, c2=$('color2').value, c3=$('color3').value,
-        set=$('packSet').value.trim();
-// Tags (comma/semicolon/newline/# as separators; spaces allowed within a tag)
-const tags = parseTags($('packTags')?.value || '');
+// Add/manage packs — NEW (supports 1–5 colors incl. C, reads from grid)
+on($('addPackBtn'),'click',()=>{
+  const name  = $('packName').value.trim();
+  const theme = $('packTheme').value.trim();
+  const set   = $('packSet').value.trim();
+  const tags  = parseTags($('packTags')?.value || '');
 
+  if (!name) return alert('Please enter a pack name.');
 
-  if(!name) return alert('Please enter a pack name.');
-  if(!c1)   return alert('Please choose at least Color 1.');
+  // Read selected colors directly from the grid
+  const grid   = $('manaGrid');
+  const colors = grid ? Array.from(grid.querySelectorAll('.mana-btn.selected')).map(b=>b.dataset.color) : [];
 
-  const colors = Array.from(new Set([c1,c2,c3].filter(Boolean)));
-  if(colors.length<1||colors.length>3) return alert('Packs must have 1 to 3 colors.');
+  if (colors.length < 1) return alert('Please choose at least one color.');
+  if (colors.length > 5) return alert('Packs can have at most 5 colors.');
 
+  // Normalize color order for dedupe (W U B R G C)
+  const ORDER    = { W:0, U:1, B:2, R:3, G:4, C:5 };
+  const sortCols = arr => arr.slice().sort((a,b)=>(ORDER[a]??99)-(ORDER[b]??99));
+  const cols     = sortCols(colors);
+
+  // Stronger duplicate check (name + set + normalized colors)
   const dup = state.collection.some(p =>
-    p.name.toLowerCase()===name.toLowerCase() &&
-    JSON.stringify(p.colors)===JSON.stringify(colors) &&
-    String(p.set||'').toLowerCase()===set.toLowerCase()
+    p.name.trim().toLowerCase() === name.toLowerCase() &&
+    String(p.set||'').trim().toLowerCase() === set.toLowerCase() &&
+    JSON.stringify(sortCols(p.colors||[])) === JSON.stringify(cols)
   );
-  if(dup) return alert('That pack (name + colors + set) already exists.');
+  if (dup) return alert('That pack (name + colors + set) already exists.');
 
   const deck = (state.newPackDeck||[]).map(normalizeDeckItem).filter(Boolean);
 
@@ -2757,19 +4486,17 @@ const tags = parseTags($('packTags')?.value || '');
     id: uid(),
     name,
     theme: theme || null,
-    colors,
+    colors: cols,
     set: set || null,
     deck,
     tags
-
-  
   });
 
   saveAll();
   state.settingsCollection.page = 1;
 
-// clear the add-pack form
-['packName','packTheme','packSet','packTags'].forEach(id=>$(id).value='');
+  // clear the add-pack form
+  ['packName','packTheme','packSet','packTags'].forEach(id=>$(id).value='');
   window.resetManaSelection?.();
 
   state.newPackDeck = [];
@@ -2831,7 +4558,7 @@ on($('resetOfferedBtn'),'click',()=>{
 });
 
     // Wipe collection (and fair stats)
-    on($('wipeBtn'),'click',()=>{ if(confirm('Wipe entire collection and fair stats?')){ state.collection=[]; state.fair={}; saveAll(); resetSession(); }});
+    on($('wipeBtn'),'click',()=>{ if(confirm('Wipe entire collection and Stats?')){ state.collection=[]; state.fair={}; saveAll(); resetSession(); }});
 
     // Export/Import/Backup
     on($('exportBtn'),'click',()=>{ const data=JSON.stringify(state.collection,null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='jumpstart_collection.json'; a.click(); URL.revokeObjectURL(url); });
@@ -2849,6 +4576,11 @@ on($('resetOfferedBtn'),'click',()=>{
   a.href = url; a.download = 'jumpstart_usage.csv'; a.click();
   URL.revokeObjectURL(url);
 });
+
+on($('magicLinkBtn'), 'click', () => withBusy('Minting magic…', createMagicLink));
+on($('pasteMagicLinkBtn'),'click',()=>withBusy('Importing via Magic Link…', openPasteMagicLink));
+
+
 
 on($('resetPicksBtn'),'click',()=>{
   if(!confirm('Reset all PICK counters to 0? (Offered counters unchanged)')) return;
@@ -3038,7 +4770,7 @@ on($('n_add'),'click', async ()=>{
 on($('n_bulk_open'),'click', ()=>{
   openModal({
     title:'Bulk Paste for New Pack',
-    okText:'Parse & Add',
+    okText:'Add',
     bodyHTML:`<textarea id="n_bulk_ta" rows="10" style="width:100%"></textarea>`,
     onOpen: ()=> $('n_bulk_ta')?.focus(),
     onOK: async ()=>{
@@ -3691,9 +5423,28 @@ $('dealSummary').textContent=`Dealt ${out.length} / ${settings.players}${setting
 
 // Init
 resetSession();
-state.settingsCollection.view = 'collection';
+
+// Honor previously restored/saved view if valid; else default to 'collection'
+const validViews = ['collection','play','stats','official'];
+
+if (!validViews.includes(state.settingsCollection.view)) {
+  const saved = (()=>{ try { return localStorage.getItem(LS_VIEW) || ''; } catch(_){ return ''; } })();
+  state.settingsCollection.view = validViews.includes(saved) ? saved : 'collection';
+}
+
+// If URL hash indicates a view, prefer it (and save it)
+{
+  const hv = (location.hash || '').replace(/^#/, '');
+  if (validViews.includes(hv)) {
+    state.settingsCollection.view = hv;
+    try { localStorage.setItem(LS_VIEW, hv); } catch(_){}
+  }
+}
+
 updateView();
 renderEverything();
+checkForMagicLinkInURL();
+
 });
 
 // --- Mana grid wiring (row-filling buttons incl. Colorless) ---
@@ -3726,27 +5477,31 @@ renderEverything();
       h3.value = colors[2] || '';
       if (hint){
         const n = colors.length;
-        hint.textContent = n===0 ? 'Select 1–3 colors.'
-                      : n===1 ? 'Mono color.'
-                      : n===2 ? 'Two-color.'
-                      : 'Tri-color.';
+        hint.textContent = n===0 ? 'Mana Idenity'
+                : n===1 ? 'Mono color.'
+                : n===2 ? 'Two-color.'
+                : n===3 ? 'Tri-color.'
+                : n===4 ? 'Four-color.'
+                : 'Five-color.';
       }
     }
 
     // Click to toggle (max 3 fo now)
-    grid.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.mana-btn');
-      if (!btn || !grid.contains(btn)) return;
-      const isSelected = btn.classList.contains('selected');
-      const count = grid.querySelectorAll('.mana-btn.selected').length;
-      if (!isSelected && count >= 3){
-        if (hint) hint.textContent = 'You can select up to 3 colors.';
-        return;
-      }
-      btn.classList.toggle('selected');
-      btn.setAttribute('aria-pressed', btn.classList.contains('selected') ? 'true' : 'false');
-      syncHidden();
-    });
+// Click to toggle (max 5 now)
+grid.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.mana-btn');
+  if (!btn || !grid.contains(btn)) return;
+  const isSelected = btn.classList.contains('selected');
+  const count = grid.querySelectorAll('.mana-btn.selected').length;
+  if (!isSelected && count >= 5){
+    if (hint) hint.textContent = 'You can select up to 5 colors.';
+    return;
+  }
+  btn.classList.toggle('selected');
+  btn.setAttribute('aria-pressed', btn.classList.contains('selected') ? 'true' : 'false');
+  syncHidden();
+});
+
 
     // Public reset used after adding/clearing the form
     window.resetManaSelection = function resetManaSelection(){
@@ -3755,7 +5510,7 @@ renderEverything();
         b.setAttribute('aria-pressed','false');
       });
       h1.value = h2.value = h3.value = '';
-      if (hint) hint.textContent = 'Select 1–3 colors.';
+      if (hint) hint.textContent = 'Mana Idenity';
     };
 
     // If hidden inputs already had values (edit flows), reflect in UI
@@ -4028,6 +5783,34 @@ function usageToCSV(){
   const body = rows.map(r=> header.map(h=>escCSV(r[h])).join(',')).join('\n');
   return header.join(',')+'\n'+body;
 }
+
+
+// OFFICIAL PAGER — forced attach, no flag
+(() => {
+  if (document.__HYDRA_PAGER_V3__) return;
+  document.__HYDRA_PAGER_V3__ = true;
+  
+
+  document.addEventListener('click', (e) => {
+    const el = e.target && e.target.closest &&
+      e.target.closest('#officialPrev, #officialNext, [data-role="official-prev"], [data-role="official-next"]');
+    if (!el) return;
+
+    const st = state.official || (state.official = {
+      search: '', colorFilter: [], colorMode: 'any', setFilter: [], kind: 'ALL', page: 1, pageSize: 24
+    });
+
+    const role   = el.getAttribute && el.getAttribute('data-role');
+    const isPrev = (el.id === 'officialPrev' || role === 'official-prev');
+    const isNext = (el.id === 'officialNext' || role === 'official-next');
+
+    st.page = Math.max(1, (st.page || 1) + (isNext ? 1 : (isPrev ? -1 : 0)));
+
+    renderOfficialGrid();
+  });
+})();
+
+
 
 
 // THE END OF THE WORLD

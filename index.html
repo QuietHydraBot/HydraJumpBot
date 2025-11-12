@@ -18,6 +18,7 @@ SECTIONS:
   [B] Header bar & badges
   [C] View: Collection
   [D] View: Play
+  [G] View: Official Products
   [E] View: Stats
   [F] Shared modals & templates
 -->
@@ -29,8 +30,40 @@ SECTIONS:
   <title>Hydra Jump Bot</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="favicon.png">
+
+  <meta name="description" content="Hydra Jump Bot lets you build, curate, and draft Jumpstart & Jump In packs right in your browser. Import released sets or build your own.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Hydra Jump Bot">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://quiethydra.com/jumpbot/">
+  <meta property="og:title" content="Hydra Jump Bot — Draft Jumpstart-style packs in your browser">
+  <meta property="og:description" content="Hydra Jump Bot lets you build, curate, and draft Jumpstart & Jump In packs right in your browser. Import released sets or build your own.">
+  <meta property="og:image" content="https://quiethydra.com/jumpbot/og/jumpbot-card-v1.png">
+  <meta property="og:image:secure_url" content="https://quiethydra.com/jumpbot/og/jumpbot-card-v1.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hydra Jump Bot preview image, neon text on the right that reads, Hydra Bot and a image of a hydrea head on the lfet.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Hydra Jump Bot — Draft Jumpstart packs in your browser">
+  <meta name="twitter:description" content="Build, curate, and draft Jumpstart & Jump In packs. Import sets or make your own.">
+  <meta name="twitter:image" content="https://quiethydra.com/jumpbot/og/jumpbot-card-v1.png">
+  <meta name="twitter:image:alt" content="Hydra Jump Bot preview image">
+  <link rel="canonical" href="https://quiethydra.com/jumpbot/">
+
+  <!-- Official Banner -->
+  <script>
+    window.OFFICIAL_BANNER = [
+      { text: "Avatar the Last Airbender", kind: "JUMPSTART", set: "Avatar Jumpstart", bg: "banners/Avatar2.jpg" },
+      { text: "Jumpstart 2022 is Here", kind: "JUMPSTART", set: "Jumpstart 2022", bg: "banners/j22-jumpstart.jpg" },
+      { text: "Jump In! Final Fantasy", kind: "JUMPIN", set: "Final Fantasy", bg: "banners/fin-jumpin.jpg" }
+    ];
+  </script>
+
 </head>
 <!-- [A] Head & assets -- END -->
+
+
+
 <body>
 
 
@@ -39,13 +72,15 @@ SECTIONS:
 <header class="hdr">
   <h1>Hydra Jump Bot</h1>
   <span class="badge" id="appVersion" title="Hydra Jump Bot version">v…</span>
-  <span class="badge" id="collectionCount">0 packs</span>
-  <span class="badge warn" id="storageStatus">Storage…</span>
-  <span class="badge ok" id="jsStatus">Script: OK</span>
+  <!-- <span class="badge" id="collectionCount">0 packs</span> -->
+  <!-- <span class="badge warn" id="storageStatus">Storage…</span> -->
+  <!-- <span class="badge ok" id="jsStatus">Script: OK</span> -->
   <div class="switcher">
     <!-- <span class="badge ok">Thing</span> -->
     <button id="btnViewCollection" class="active">Collection</button>
     <button id="btnViewPlay">Play</button>
+    <button id="btnViewOfficial">WotC Packs</button>
+    <!-- <button id="btnViewCommunity"><s>Community</s></button> -->
     <button id="btnViewStats">Stats</button>
   </div>
 </header>
@@ -71,9 +106,12 @@ SECTIONS:
           <div class="tiny" id="storeLine">…</div>
           <div class="tiny" id="storeHint"></div>
         </div>
+        <!-- Storage Buttons -->
         <div style="flex:1; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start">
           <button class="btn btn-pink" id="backupBtn">Backup Now</button>
-          <button class="btn btn-danger" id="wipeBtn" title="Delete all packs &amp; stats">Wipe Collection</button>
+          <button class="btn btn-cyan" id="magicLinkBtn" title="Create a link that carries your collection to another device">Magic Link</button>
+          <button id="pasteMagicLinkBtn" class="btn btn-gray" type="button" title="Paste a Magic Link to merge missing packs">Cast Magic Link</button>
+          <button class="btn btn-danger" id="wipeBtn" title="Delete all packs &amp; stats">Delete Collection</button>
         </div>
       </div>
     </details>
@@ -81,27 +119,29 @@ SECTIONS:
 
     <!-- Pack Manager -- START -->
     <details open>
-      <summary>Add / Manage Packs</summary>
+      <summary>Add Packs</summary>
       <div class="row">
-        <div><label>Pack Name</label><input id="packName" type="text" placeholder="e.g., Vampires — Life Leech"></div>
-        <div><label>Theme (optional)</label><input id="packTheme" type="text" placeholder="e.g., Lifedrain"></div>
-        <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Core Box"></div>
+        <div><label>Pack Name<span class="req">&ast;</span></label><input id="packName" type="text" placeholder="e.g., Voracious Hydra"></div>
+        <div><label>Theme</label><input id="packTheme" type="text" placeholder="e.g., Stompy"></div>
+        <div><label>Set / Box</label><input id="packSet" type="text" placeholder="e.g., Oops All Hydras"></div>
       </div>
+      <!-- Set Tags -->
       <div class="row">
         <div>
-          <label>Tags (optional)</label>
+          <label>Tags</label>
           <input id="packTags" type="text" placeholder="e.g., tribal, budget, slivers">
           <div class="tiny" style="margin-top:4px; opacity:.8">Separate by commas, semicolons, or “#”</div>
         </div>
       </div>
       <div class="row">
+        <!-- Color Picker -->
         <div>
-          <div class="tiny mana-label" id="manaHint">Select 1–3 colors.</div>
+          <div class="tiny mana-label" id="manaHintxx">Mana Identity<span class="req">&ast;</span></div>
           <div id="manaGrid"
           class="mana-grid"
           role="group"
           aria-labelledby="manaHint"
-          aria-label="Choose 1 to 3 colors">
+          aria-label="Choose 1 to 5 colors">
           <button type="button" class="mana-btn c W" data-color="W" aria-pressed="false">W</button>
           <button type="button" class="mana-btn c U" data-color="U" aria-pressed="false">U</button>
           <button type="button" class="mana-btn c B" data-color="B" aria-pressed="false">B</button>
@@ -133,13 +173,13 @@ SECTIONS:
         </div>
         <div class="row">
           <div style="flex:0 0 auto">
-            <button class="btn btn-cyan" id="n_bulk_open" type="button">Bulk Paste…</button>
+            <button class="btn btn-cyan" id="n_bulk_open" type="button" style="margin-top: 8px;">Bulk Paste &#x21AA;</button>
           </div>
         </div>
         <div id="n_list" class="tiny" style="margin-top:6px"></div>
       </details>
       <!-- Pack Manager Buttons -- START  -->
-      <div class="row">
+      <div class="row" style="margin-top: 15px;">
         <button class="btn btn-cyan" id="addPackBtn">Add Pack</button>
         <button class="btn btn-gray" id="clearFormBtn">Clear Form</button>
       </div>
@@ -152,7 +192,7 @@ SECTIONS:
           <input id="importFileJson" type="file" accept="application/json" style="display:none">
           <button class="btn btn-gray" id="importCsvBtn">Import CSV</button>
           <input id="importFileCsv" type="file" accept=".csv,text/csv" style="display:none">
-          <button class="btn btn-yellow" id="seedBtn">Load Demo Packs</button>
+          <!-- <button class="btn btn-yellow" id="seedBtn">Load Demo Packs</button> -->
         </div>
       </details>
       
@@ -190,7 +230,7 @@ SECTIONS:
         <!-- Clear / Diagnose -->
         <div class="row" style="margin-top:8px">
           <button class="btn btn-gray" id="clearCollectionFiltersBtn">Clear Filters</button>
-          <button class="btn btn-gray btn-small" id="diagnoseSetMismatchBtn">Diagnose Collection</button>
+          <!-- <button class="btn btn-gray btn-small" id="diagnoseSetMismatchBtn">Diagnose Collection</button> -->
         </div>
         <br>
         <!-- Advanced filter block-->
@@ -239,7 +279,10 @@ SECTIONS:
     
     <!-- Collection List -->
     <details open id="collectionList">
-      <summary>Collection List</summary>
+      <summary>
+        Collection List
+        <span class="badge" id="collectionCount">0 packs</span>
+      </summary>
       <!-- Pack Sorting Tools -->
        <div class="row" style="align-items:center">
         <div>
@@ -272,7 +315,8 @@ SECTIONS:
     </details>
   </div>
 </section>
-    
+<!-- [C] View: Collection -- END -->
+
 
 
 <!-- [D] View: Play -- START -->   
@@ -331,7 +375,7 @@ SECTIONS:
     </details>
     <!-- Roll Settings -->
     <details>
-      <summary>Roll Settings</summary>
+      <summary>Draf Settings</summary>
       <div class="row">
         <div><label>Options per roll (3–6)</label><input id="optionsPerRoll" type="number" min="3" max="6" step="1" value="3"></div>
         <div>
@@ -370,22 +414,22 @@ SECTIONS:
       <div class="roll-col">
         <!-- First Pick -->
         <div class="row" style="margin-top:6px">
-          <button class="btn btn-cyan" id="rollFirstBtn">Roll First Options</button>
+          <button class="btn btn-cyan" id="rollFirstBtn">Draft First Packs</button>
           <button class="btn btn-gray" id="resetPlayBtn">Reset Session</button>
         </div>
         <div>
-          <label>First Roll (pick one)</label>
+          <label>First Draft</label>
           <div class="options" id="firstOptions"></div>
         </div>
       </div>
       <div class="roll-col">
         <!-- Second Pick -->
         <div class="row" style="margin-top:6px">
-          <button class="btn btn-cyan" id="rollSecondBtn">Roll Second Options</button>
-          <button class="btn btn-yellow" id="rerollSecondBtn">Re-roll Second Options</button>
+          <button class="btn btn-cyan" id="rollSecondBtn">Draft Second Packs</button>
+          <button class="btn btn-yellow" id="rerollSecondBtn">Re-draft Second</button>
         </div>
         <div>
-          <label>Second Roll (pick one)</label>
+          <label>Second Draft</label>
           <div class="options" id="secondOptions"></div>
         </div>
       </div>
@@ -405,13 +449,6 @@ SECTIONS:
       <div id="historyList" class="list"></div>
     </details>
     <div class="sep"></div>
-    <!-- Session Log -- START -->
-    <div class="stat" id="statusLine">No session yet.</div>
-    <div class="sep"></div>
-    <div>
-      <label>Session Log</label>
-      <ul id="log" class="log"></ul>
-    </div>
     <!-- Quick Play -- START -->
     <details open>
       <summary>Quick Play</summary>
@@ -426,9 +463,104 @@ SECTIONS:
       <div class="tiny" id="dealSummary"></div>
       <div class="options" id="dealtResults"></div>
     </details>
+
+      <!-- Session Log -- START -->
+    <details><summary>Session Log</summary>
+      <div class="stat" id="statusLine">No session yet.</div>
+      <div class="sep"></div>
+      <div>
+        <label>Session Log</label>
+        <ul id="log" class="log"></ul>
+     </div>
+     </details>
   </div>
 </section>
 <!-- [D] View: Play -- END -->
+
+
+
+<!-- [G] View: Official Products — START -->
+<section class="card hidden" id="officialCard">
+  <h2>Officially Released Packs</h2>
+  <div class="content">
+    <aside class="off-news">
+      <!-- Image Carousel -->
+      <div id="officialBanner" class="off-banner carousel" aria-roledescription="carousel" aria-label="Official updates">
+        <div id="officialBannerSlides" class="slides" role="group" aria-live="polite"><!-- slides --></div>
+          <!-- Controls -->
+          <button id="officialBannerPrev" class="banner-nav prev" aria-label="Previous update" type="button">-</button>
+          <button id="officialBannerNext" class="banner-nav next" aria-label="Next update" type="button">+</button>
+          <!-- Dots -->
+          <div id="officialBannerDots" class="banner-dots" role="tablist"><!-- dots --></div>
+        </div>
+    <div id="officialNewsKPI" class="off-kpis"><!-- KPIs --></div>
+    </aside>
+    <!-- Filters and Grid -->
+    <div class="off-layout">
+      <!-- Left column: filters -->
+      <aside id="officialFilters" class="off-filters">
+        <div class="block">
+          <label for="officialSearchInput" class="lbl">Search (name, theme, tags)</label>
+          <input id="officialSearchInput" class="input" type="search" placeholder="Search packs">
+        </div>
+        <!-- Format and Set Filters -->
+        <div class="block">
+          <div class="lbl with-btn">
+            <span>Filter by set</span>
+            <button id="officialSetClear" class="btn btn-gray tiny">Clear</button>
+        </div>
+        <!-- Format chips (JumpStart / Jump In!) -->
+        <div class="tiny" style="opacity:.9; margin:4px 0 6px">Format</div>
+        <div id="officialKindBox" class="set-grid"><!-- kind chips --></div>
+        <!-- JumpStart sets -->
+        <div id="officialSetWrapJS" class="set-wrap">
+          <div class="tiny" style="opacity:.9; margin:10px 0 4px">JumpStart</div>
+          <div id="officialSetListJS" class="set-grid"><!-- JumpStart sets --></div>
+        </div>
+        <!-- Jump In! sets -->
+        <div id="officialSetWrapJI" class="set-wrap">
+          <div class="tiny" style="opacity:.9; margin:10px 0 4px">Jump In!</div>
+          <div id="officialSetListJI" class="set-grid"><!-- Jump In! sets --></div>
+        </div>
+      </div>
+      <div class="block">
+        <div class="lbl with-btn">
+          <span>Filter by color</span>
+          <button id="officialClrClear" class="btn btn-gray tiny">Clear</button>
+        </div>
+        <div class="tiny" style="opacity:.9; margin:4px 0 6px">Mode</div>
+          <select id="officialColorMode" class="input" style="max-width:140px; margin-bottom:6px;">
+            <option value="any" selected>Any</option>
+            <option value="all">All</option>
+            <option value="exact">Exact</option>
+          </select>
+        <div id="officialColorBox" class="set-grid"><!-- color chips --></div>
+        </div>
+        <div class="block">
+          <label for="officialPageSize" class="lbl">Page size</label>
+          <select id="officialPageSize" class="input">
+            <option value="12">12</option>
+            <option value="24" selected>24</option>
+            <option value="48">48</option>
+            <option value="96">96</option>
+          </select>
+          <div class="off-pager" style="margin-top: 8px; justify-content: center;">
+            <button id="officialPrev" class="btn btn-gray">Prev</button>
+            <span id="officialPageInfo" class="tiny" style="text-align: center;">Page 1 of 1</span>
+            <button id="officialNext" class="btn btn-gray">Next</button>
+          </div>
+        </div>
+      </aside>
+      <!-- Right column -->
+      <section class="off-right">
+        <div id="officialGrid" class="off-grid">
+          <!-- cards here -->
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+<!-- [G] View: Official — END -->
 
 
 
@@ -475,7 +607,7 @@ SECTIONS:
   <small>© 2025 QuietHydra</small>
   <div class="spacer"></div>
   <div class="pill" style="gap:10px">
-    <a href="https://bsky.app/profile/quiethydra.com" target="_blank" rel="noopener">Bluesky</a>
+    <a href="https://bsky.app/profile/hydrabot.bsky.social" target="_blank" rel="noopener">Bluesky</a>
     <a href="https://www.youtube.com/@QuietHydra" target="_blank" rel="noopener">YouTube</a>
     <a href="https://github.com/QuietHydraBot/HydraJumpBot" target="_blank" rel="noopener">GitHub</a>
     <a href="https://ko-fi.com/quiethydra" target="_blank" rel="noopener">Buy Me A Single</a>
@@ -486,6 +618,28 @@ SECTIONS:
     <a href="NOTICE.md" target="_blank" rel="noopener">Attribution Notice</a>
   </span>
 </footer>
+<footer id="legalFooter" class="legal-footer" role="contentinfo" aria-label="Legal notices and attributions">
+  <div class="legal-inner">
+    <div class="legal-col">
+      <strong>Fan Project</strong>
+      <p>
+        Hydra Jump Bot is an independent fan project and is not affiliated with, endorsed, sponsored, or specifically approved by Wizards of the Coast.
+        Magic: The Gathering and all related properties are © Wizards of the Coast LLC.
+        See Wizards’ <a href="https://company.wizards.com/en/legal/fancontentpolicy" target="_blank" rel="noopener noreferrer">Fan Content Policy</a>.
+      </p>
+    </div>
+    <div class="legal-col">
+      <strong>Data & Images</strong>
+      <p>
+        Card data and images are provided by
+        <a href="https://scryfall.com" target="_blank" rel="noopener noreferrer">Scryfall</a> and used under the
+        <a href="https://scryfall.com/docs/api" target="_blank" rel="noopener noreferrer">Scryfall API</a>.
+        This site is not produced by or endorsed by Scryfall.
+      </p>
+    </div>
+  </div>
+</footer>
+
 <!-- [Y] Footer -- END -->
 
 
@@ -494,11 +648,14 @@ SECTIONS:
 <div id="busy" class="busy hidden" role="status" aria-live="polite" aria-busy="true" aria-hidden="true">
   <div class="busy-inner">
     <div class="spinner" aria-hidden="true"></div>
-    <div class="msg" id="busyMsg">Working…</div>
+    <div class="msg" id="busyMsg">Working </div>
   </div>
 </div>
 
 
+
+<!-- Official loader -->
+<script src="official/index.js?v=3"></script>
 
 <!-- Css and JS Loader -->
 <script>
@@ -529,7 +686,7 @@ SECTIONS:
   };
 
   document.head.appendChild(s);
-})('0.7.2'); // bump up to deploy
+})('0.7.4'); // bump up to deploy
 </script>
 </body>
 </html>
